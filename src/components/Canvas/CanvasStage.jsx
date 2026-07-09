@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import Molecule3DViewer from "../../Molecule3DViewer";
 import SimpleModeLegend from "../Legend/SimpleModeLegend";
 import ReactionToastStack from "../ReactionToast/ReactionToastStack";
@@ -15,6 +16,20 @@ export default function CanvasStage({
   orbitSpeed, setOrbitSpeed,
   distinctMolecules, selected3DMoleculeIndex, setSelected3DMoleculeIndex,
 }) {
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleWheelRaw = (e) => {
+      handleWheel(e);
+    };
+
+    canvas.addEventListener("wheel", handleWheelRaw, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", handleWheelRaw);
+    };
+  }, [canvasRef, handleWheel]);
+
   return (
     <>
           <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "var(--clb-bg-canvas)", transition: "background 0.3s ease" }}>
@@ -97,7 +112,6 @@ export default function CanvasStage({
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseLeave || handleMouseUp}
-              onWheel={handleWheel}
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
             />

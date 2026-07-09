@@ -6,7 +6,7 @@ const WAITING_MESSAGES = ["Searching...", "Researching...", "Finding your answer
 // Presentational — all state (messages, input, expanded) lives in ChemLabCanvas.
 export default function ChatPanel({
   chatExpanded, setChatExpanded, chatMessages, chatInput, setChatInput,
-  sendChatMessage, useAI, isWaitingForAI, handleSpawnReaction,
+  sendChatMessage, useAI, isWaitingForAI,
 }) {
   const [waitingMsgIndex, setWaitingMsgIndex] = useState(0);
   useEffect(() => {

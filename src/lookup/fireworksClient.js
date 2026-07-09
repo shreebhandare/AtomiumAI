@@ -54,7 +54,9 @@ RULES:
 - "from"/"to" are indices into "reactants", not symbols.
 - Return strictly valid JSON matching the schema.`;
 
-  const targetModel = model || "accounts/fireworks/models/llama-v3p3-70b-instruct";
+  if (!model) {
+    throw new Error("VITE_FIREWORKS_MODEL is not configured. Set it in your .env file.");
+  }
 
   const res = await fetchWithRetry(
     "https://api.fireworks.ai/inference/v1/chat/completions",
@@ -65,11 +67,10 @@ RULES:
         "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: targetModel,
+        model,
         messages: [
           { role: "user", content: prompt }
-        ],
-        response_format: { type: "json_object" }
+        ]
       }),
     }
   );
@@ -79,7 +80,7 @@ RULES:
       throw new Error("Fireworks API Rate Limit Exceeded (429). Please wait a moment before trying again.");
     }
     if (res.status === 401 || res.status === 403) {
-      throw new Error("Fireworks API Key Invalid or Unauthorized. Please verify your key in Settings.");
+      throw new Error("Fireworks API Key Invalid or Unauthorized. Please verify VITE_FIREWORKS_API_KEY in your .env file.");
     }
     throw new Error(`Fireworks request failed: ${res.status}`);
   }
@@ -88,8 +89,22 @@ RULES:
   const raw = data?.choices?.[0]?.message?.content;
   if (!raw) throw new Error("Empty Fireworks response");
 
-  const cleaned = raw.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(cleaned);
+  let parsed = null;
+  try {
+    const cleaned = raw.replace(/```json|```/g, "").trim();
+    parsed = JSON.parse(cleaned);
+  } catch (e) {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        parsed = JSON.parse(match[0]);
+      } catch (_) {
+        throw new Error("Malformed Fireworks reaction object");
+      }
+    } else {
+      throw new Error("No JSON object found in Fireworks response");
+    }
+  }
 
   if (parsed.invalid) return null;
   if (!Array.isArray(parsed.reactants) || !Array.isArray(parsed.bonds) || !parsed.formula) {

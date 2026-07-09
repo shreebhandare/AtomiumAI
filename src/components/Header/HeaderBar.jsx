@@ -15,10 +15,6 @@ export default function HeaderBar({
   setVisualMode,
   theme,
   setTheme,
-  fireworksApiKey,
-  updateFireworksApiKey,
-  fireworksModel,
-  updateFireworksModel,
 }) {
   return (
     <div
@@ -281,48 +277,6 @@ export default function HeaderBar({
                   {useAI ? "Yes" : "No"}
                 </button>
               </div>
-            </div>
-
-            <div style={{ height: 1, background: "#f1f5f9" }} />
-
-            {/* AI API KEY */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>🔑 AI API Key</div>
-              <input
-                type="password"
-                value={fireworksApiKey}
-                onChange={(e) => updateFireworksApiKey(e.target.value)}
-                placeholder="Enter Fireworks API Key..."
-                style={{
-                  padding: "8px 12px",
-                  fontSize: 13,
-                  borderRadius: 8,
-                  border: "1px solid #cbd5e1",
-                  outline: "none",
-                  width: "100%",
-                }}
-              />
-            </div>
-
-            <div style={{ height: 1, background: "#f1f5f9" }} />
-
-            {/* AI MODEL */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>⚙️ AI Model</div>
-              <input
-                type="text"
-                value={fireworksModel}
-                onChange={(e) => updateFireworksModel(e.target.value)}
-                placeholder="accounts/fireworks/models/..."
-                style={{
-                  padding: "8px 12px",
-                  fontSize: 13,
-                  borderRadius: 8,
-                  border: "1px solid #cbd5e1",
-                  outline: "none",
-                  width: "100%",
-                }}
-              />
             </div>
 
             <div style={{ height: 1, background: "#f1f5f9" }} />

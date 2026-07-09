@@ -78,18 +78,15 @@ export const backgroundLookupQueue = new Set();
 // prevent duplicate in-flight requests for same fingerprint
 export const pendingLookups = new Set();
 
-// Loaded from environment variable. Exported as live bindings so importers
-// always see the current values; use setters to update them.
-export let FIREWORKS_API_KEY = import.meta.env.VITE_FIREWORKS_API_KEY || null;
-export let FIREWORKS_MODEL = import.meta.env.VITE_FIREWORKS_MODEL || "accounts/fireworks/models/llama-v3p3-70b-instruct";
+// Loaded from environment variables. Read-only — no runtime setters.
+// Model selection is a deployment/configuration concern (edit .env, restart dev server).
+export const FIREWORKS_API_KEY = import.meta.env.VITE_FIREWORKS_API_KEY || null;
+export const FIREWORKS_MODEL = import.meta.env.VITE_FIREWORKS_MODEL || null;
 
-export function setFireworksApiKey(key) {
-  FIREWORKS_API_KEY = key || null;
+if (!FIREWORKS_MODEL) {
+  console.error("[ChemLab] VITE_FIREWORKS_MODEL is not configured. Set it in your .env file (e.g. VITE_FIREWORKS_MODEL=accounts/fireworks/models/qwen3p7-plus).");
 }
 
-export function setFireworksModel(model) {
-  FIREWORKS_MODEL = model || "accounts/fireworks/models/llama-v3p3-70b-instruct";
-}
 
 // "Search Online" toggle (Upgrade #10.1): when false, PubChem's live network
 // lookup is skipped entirely and resolution falls back to whatever's already
