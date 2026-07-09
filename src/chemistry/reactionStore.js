@@ -32,14 +32,29 @@
 //     See reactionEngine.js / moleculeReactionResolver.js for how this is
 //     consumed.
 
-import { REACTION_SEED_DATA } from "./reactionsSeed";
-import { canonicalReactantSignature } from "./moleculeReactionResolver";
+import { canonicalReactantSignature } from "./reactionUtils";
 
 // ── Atom-assembly compound blueprints (formerly named REACTIONS) ──
 export const COMPOUND_BLUEPRINTS = {};
 
 // ── Molecule-based reaction database (the new, molecule-based REACTIONS) ──
 export const REACTIONS = {};
+
+let isReady = false;
+
+export function isReactionStoreReady() {
+  return isReady;
+}
+
+export function setReactionStoreReady(ready) {
+  isReady = !!ready;
+}
+
+export function clearReactions() {
+  for (const key in REACTIONS) {
+    delete REACTIONS[key];
+  }
+}
 
 /**
  * Registers a molecule-based reaction entry under its canonical reactant
@@ -52,11 +67,6 @@ export function registerReaction(entry) {
   REACTIONS[key] = entry;
   return key;
 }
-
-// Seed the molecule-reaction database with known reactions covering every
-// required reaction family (see reactionsSeed.js). More entries can be
-// registered at runtime (e.g. from AI prediction) via registerReaction().
-REACTION_SEED_DATA.forEach(registerReaction);
 
 /**
  * Finds a known atom-bond blueprint for a given product molecule formula

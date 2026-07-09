@@ -24,6 +24,7 @@ import { ELEMENTS, getElement, getGroupStyles } from "./data/elements";
 import { fingerprint } from "./chemistry/fingerprint";
 import {
   REACTIONS,
+  COMPOUND_BLUEPRINTS,
   bumpInventorySearchGeneration, getInventorySearchGeneration,
   setSearchOnlineEnabled,
 } from "./chemistry/reactionStore";
@@ -318,12 +319,12 @@ export default function ChemLabCanvas() {
   useEffect(() => {
     supabase.from('reactions').select('*').then(({ data, error }) => {
       if (error) {
-        console.error("Error loading reactions from Supabase:", error.message);
+        console.error("Error loading compound blueprints from Supabase:", error.message);
         return;
       }
       if (data) {
         data.forEach(row => {
-          REACTIONS[row.fingerprint] = {
+          COMPOUND_BLUEPRINTS[row.fingerprint] = {
             name: row.name,
             formula: row.formula,
             reactants: row.reactants,
@@ -336,7 +337,7 @@ export default function ChemLabCanvas() {
             fromPubChem: true,
           };
         });
-        console.log(`Loaded ${data.length} reactions from Supabase.`);
+        console.log(`Loaded ${data.length} compound blueprints from Supabase.`);
       }
     });
   }, []);
