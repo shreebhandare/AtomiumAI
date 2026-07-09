@@ -1,3 +1,5 @@
+import { canonicalizeFormulaString } from "../formulaParser";
+
 /**
  * Builds an order-independent signature for a list of reactant molecule
  * formulas, e.g. ["Na2SO4", "BaCl2"] and ["BaCl2", "Na2SO4"] both produce
@@ -9,5 +11,8 @@
  * @returns {string} - Canonical signature
  */
 export function canonicalReactantSignature(formulas) {
-  return [...formulas].map((f) => String(f).trim()).sort().join("|");
+  return [...formulas]
+    .map((f) => canonicalizeFormulaString(String(f).trim()))
+    .sort()
+    .join("|");
 }

@@ -352,3 +352,198 @@ function parseSubFormula(s) {
   
   return atoms;
 }
+
+/**
+ * Authoritative element ordering sequence according to chemical conventions (Hill System & pseudo-electronegativity sequence).
+ * Returns the elements in canonical formula order.
+ *
+ * @param {string[]} syms - Array of element symbols (e.g. ["H", "Cl"])
+ * @returns {string[]} - Canonical sorted list of symbols
+ */
+export function canonicalElementOrder(syms) {
+  const hasCarbon = syms.includes("C");
+  const hasHydrogen = syms.includes("H");
+  const hasMetal = syms.some(s => {
+    const el = ELEMENTS.find(e => e.sym === s);
+    return el && el.group !== "nonmetal" && el.group !== "noble" && el.group !== "metalloid";
+  });
+
+  const isOrganic = hasCarbon && hasHydrogen;
+
+  return [...syms].sort((a, b) => {
+    if (a === b) return 0;
+
+    // Organic compounds (Hill System): C, then H, then others alphabetically
+    if (isOrganic) {
+      if (a === "C") return -1;
+      if (b === "C") return 1;
+      if (a === "H") return -1;
+      if (b === "H") return 1;
+      return a.localeCompare(b);
+    }
+
+    // Metal rule: Metals always come first
+    const isAMetal = (() => {
+      const el = ELEMENTS.find(e => e.sym === a);
+      return el && el.group !== "nonmetal" && el.group !== "noble" && el.group !== "metalloid";
+    })();
+    const isBMetal = (() => {
+      const el = ELEMENTS.find(e => e.sym === b);
+      return el && el.group !== "nonmetal" && el.group !== "noble" && el.group !== "metalloid";
+    })();
+
+    if (isAMetal && !isBMetal) return -1;
+    if (!isAMetal && isBMetal) return 1;
+    if (isAMetal && isBMetal) {
+      // Both metals: sort by electronegativity (lower first)
+      const elA = ELEMENTS.find(e => e.sym === a);
+      const elB = ELEMENTS.find(e => e.sym === b);
+      const enA = elA?.en ?? 2.0;
+      const enB = elB?.en ?? 2.0;
+      if (enA !== enB) return enA - enB;
+      return a.localeCompare(b);
+    }
+
+    // Both non-metals/metalloids (Inorganic)
+    const getPriority = (sym) => {
+      if (sym === "H") {
+        if (hasMetal) return 46; // e.g. NaOH: Na (metal) -> O -> H
+        if (syms.includes("N") && !syms.includes("O")) return 36; // e.g. NH3: N -> H
+        return 5; // e.g. H2O, HCl, HNO3, H2SO4: H comes first
+      }
+      if (sym === "C") return 10;
+      if (sym === "N") return 11;
+      if (sym === "P") return 12;
+      if (sym === "S") return 20;
+      if (sym === "O") return 45;
+      if (sym === "F") return 50;
+      if (sym === "Cl") return 51;
+      if (sym === "Br") return 52;
+      if (sym === "I") return 53;
+      
+      const el = ELEMENTS.find(e => e.sym === sym);
+      return el?.en != null ? el.en * 15 : 100;
+    };
+
+    return getPriority(a) - getPriority(b);
+  });
+}
+
+/**
+ * Rebuilds a canonical formula string from a list of element symbols.
+ * Returns an ASCII formula (e.g. "Ca(OH)2", "NaCl", "H2O", "CH4").
+ *
+ * @param {string[]} syms - Array of element symbols
+ * @returns {string} - Canonical ASCII formula string
+ */
+export function canonicalFormulaFromSyms(syms) {
+  if (!syms || syms.length === 0) return "";
+  
+  const counts = {};
+  for (const s of syms) {
+    counts[s] = (counts[s] || 0) + 1;
+  }
+
+  const hasMetal = syms.some(s => {
+    const el = ELEMENTS.find(e => e.sym === s);
+    return el && el.group !== "nonmetal" && el.group !== "noble" && el.group !== "metalloid";
+  });
+
+  // Check polyatomic groupings
+  let hydroxideCount = 0;
+  if (hasMetal && counts["O"] > 0 && counts["O"] === counts["H"]) {
+    hydroxideCount = counts["O"];
+  }
+
+  let nitrateCount = 0;
+  if (counts["N"] > 0 && counts["O"] >= 3 * counts["N"]) {
+    nitrateCount = counts["N"];
+  }
+
+  let carbonateCount = 0;
+  if (hasMetal && counts["C"] > 0 && counts["O"] >= 3 * counts["C"]) {
+    carbonateCount = counts["C"];
+  }
+
+  let sulfateCount = 0;
+  if (counts["S"] > 0 && counts["O"] >= 4 * counts["S"]) {
+    sulfateCount = counts["S"];
+  }
+
+  const uniqueSyms = Object.keys(counts);
+  const sortedSyms = canonicalElementOrder(uniqueSyms);
+
+  let parts = [];
+  const consumed = { ...counts };
+
+  for (const sym of sortedSyms) {
+    if (consumed[sym] <= 0) continue;
+
+    if (hydroxideCount > 0 && (sym === "O" || sym === "H")) {
+      if (parts.includes("(OH)") || parts.includes("OH")) continue;
+      if (hydroxideCount > 1) {
+        parts.push(`(OH)${hydroxideCount}`);
+      } else {
+        parts.push(`OH`);
+      }
+      consumed["O"] -= hydroxideCount;
+      consumed["H"] -= hydroxideCount;
+      continue;
+    }
+
+    if (nitrateCount > 0 && (sym === "N" || sym === "O")) {
+      if (parts.includes("(NO3)") || parts.includes("NO3")) continue;
+      if (nitrateCount > 1) {
+        parts.push(`(NO3)${nitrateCount}`);
+      } else {
+        parts.push(`NO3`);
+      }
+      consumed["N"] -= nitrateCount;
+      consumed["O"] -= nitrateCount * 3;
+      continue;
+    }
+
+    if (sulfateCount > 0 && (sym === "S" || sym === "O")) {
+      if (parts.includes("(SO4)") || parts.includes("SO4")) continue;
+      if (sulfateCount > 1) {
+        parts.push(`(SO4)${sulfateCount}`);
+      } else {
+        parts.push(`SO4`);
+      }
+      consumed["S"] -= sulfateCount;
+      consumed["O"] -= sulfateCount * 4;
+      continue;
+    }
+
+    if (carbonateCount > 0 && (sym === "C" || sym === "O")) {
+      if (parts.includes("(CO3)") || parts.includes("CO3")) continue;
+      if (carbonateCount > 1) {
+        parts.push(`(CO3)${carbonateCount}`);
+      } else {
+        parts.push(`CO3`);
+      }
+      consumed["C"] -= carbonateCount;
+      consumed["O"] -= carbonateCount * 3;
+      continue;
+    }
+
+    const cnt = consumed[sym];
+    parts.push(`${sym}${cnt > 1 ? cnt : ""}`);
+    consumed[sym] = 0;
+  }
+
+  return parts.join("");
+}
+
+/**
+ * Normalizes any chemical formula string into its canonical ASCII form.
+ *
+ * @param {string} formulaStr - Input formula (e.g. "ClH", "OH2")
+ * @returns {string} - Canonicalized formula string (e.g. "HCl", "H2O")
+ */
+export function canonicalizeFormulaString(formulaStr) {
+  if (!formulaStr) return "";
+  const atoms = expandFormulaToAtoms(formulaStr);
+  return canonicalFormulaFromSyms(atoms);
+}
+

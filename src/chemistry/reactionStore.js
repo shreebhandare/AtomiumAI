@@ -33,6 +33,7 @@
 //     consumed.
 
 import { canonicalReactantSignature } from "./reactionUtils";
+import { canonicalizeFormulaString } from "../formulaParser";
 
 // ── Atom-assembly compound blueprints (formerly named REACTIONS) ──
 export const COMPOUND_BLUEPRINTS = {};
@@ -63,8 +64,23 @@ export function clearReactions() {
  */
 export function registerReaction(entry) {
   if (!entry || !Array.isArray(entry.reactants) || entry.reactants.length === 0) return;
-  const key = canonicalReactantSignature(entry.reactants);
-  REACTIONS[key] = entry;
+
+  const canonicalReactants = entry.reactants.map(r => canonicalizeFormulaString(r));
+  const canonicalProducts = Array.isArray(entry.products)
+    ? entry.products.map(p => ({
+        formula: canonicalizeFormulaString(p.formula),
+        coefficient: p.coefficient
+      }))
+    : [];
+
+  const canonicalEntry = {
+    ...entry,
+    reactants: canonicalReactants,
+    products: canonicalProducts
+  };
+
+  const key = canonicalReactantSignature(canonicalReactants);
+  REACTIONS[key] = canonicalEntry;
   return key;
 }
 

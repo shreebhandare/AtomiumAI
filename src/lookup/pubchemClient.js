@@ -2,6 +2,7 @@
 // not present in the local COMPOUND_BLUEPRINTS table. PubChem's API is CORS-enabled, so this
 // runs directly from the browser with no server route needed.
 import { ELEMENTS } from "../data/elements";
+import { canonicalFormulaFromSyms } from "../formulaParser";
 
 // ───────────────────────── PUBCHEM API CLIENT ─────────────────────────
 
@@ -158,17 +159,8 @@ export async function fetchCompoundRecord(cid) {
 }
 
 export async function tryPubChem(fp, syms) {
-  // Build a molecular formula from the symbol list
-  // e.g. ["H","H","O"] → "H2O", ["C","H","H","H","H"] → "CH4"
-  const counts = {};
-  for (const sym of syms) counts[sym] = (counts[sym] || 0) + 1;
-  // Standard formula order: C first, H second, then alphabetical
-  const orderedKeys = Object.keys(counts).sort((a, b) => {
-    if (a === "C") return -1; if (b === "C") return 1;
-    if (a === "H") return -1; if (b === "H") return 1;
-    return a.localeCompare(b);
-  });
-  const formula = orderedKeys.map((k) => `${k}${counts[k] > 1 ? counts[k] : ""}`).join("");
+  // Build a canonical molecular formula from the symbol list
+  const formula = canonicalFormulaFromSyms(syms);
 
   let props = null;
 

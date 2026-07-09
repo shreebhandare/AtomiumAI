@@ -4,7 +4,7 @@ import {
   selectBestLayout, denormalizePositions, normalizePositions,
   clearLayoutCache, buildCircularLayout,
 } from "./layoutEngine";
-import { parseFormula, expandFormulaToAtoms } from "./formulaParser";
+import { parseFormula, expandFormulaToAtoms, canonicalizeFormulaString, canonicalElementOrder } from "./formulaParser";
 import Molecule3DViewer from "./Molecule3DViewer";
 import HeaderBar from "./components/Header/HeaderBar";
 import FormulaInput from "./components/FormulaInput/FormulaInput";
@@ -40,7 +40,9 @@ import { runInventorySearch, findCompoundEntry } from "./lookup/reactionResoluti
 import { getCanonicalEquation, getExperimentEquation, formatFormulaUnicode, buildMoleculeEquation, getProductsLabel } from "./chemistry/equationBuilder";
 import { runReactionEngine, REACTION_ENGINE_STATUS } from "./chemistry/reactionEngine";
 import { expandProducts } from "./chemistry/moleculeReactionResolver";
-import { initializeReactionStore } from "./chemistry/initializeReactionStore";
+import { predictReactionWithAI } from "./lookup/aiReactionPredictor";
+import { persistReactionToSupabase } from "./lookup/reactionPersistence";
+import { registerReaction } from "./chemistry/reactionStore";
 
 // ───────────────────────── MAIN COMPONENT ─────────────────────────
 export default function ChemLabCanvas() {
@@ -59,6 +61,9 @@ export default function ChemLabCanvas() {
   const panStart = useRef({ mouseX: 0, mouseY: 0, panX: 0, panY: 0 });
   const lastTime = useRef(performance.now());
   const bondRestLengths = useRef(new Map()); // Map<"id1-id2", rest_length_px>
+  // Tracks a free spawned molecule that needs to snap back to its resting shape
+  // after a drag is released. { groupId, targets: Map<atomId, {x,y}> }
+  const freeMoleculeSettle = useRef(null);
 
   // Upgrade #2.5: content-aware navigation. Panning itself stays completely
   // free (no hard walls right at the molecules' edges) — but the workspace
@@ -243,13 +248,7 @@ export default function ChemLabCanvas() {
       results.push(formula);
     });
 
-    const sortedAtoms = Object.keys(individualCounts).sort((a, b) => {
-      if (a === "C") return -1;
-      if (b === "C") return 1;
-      if (a === "H") return -1;
-      if (b === "H") return 1;
-      return a.localeCompare(b);
-    });
+    const sortedAtoms = canonicalElementOrder(Object.keys(individualCounts));
     sortedAtoms.forEach((sym) => {
       const count = individualCounts[sym];
       const display = count > 1 ? `${count}${sym}` : sym;
@@ -654,8 +653,90 @@ export default function ChemLabCanvas() {
       // ── FREE ATOMS (not in committed compound): damping + boundary bounce ──
       const canvas = canvasRef.current;
 
+      // ── POST-DRAG SHAPE RESTORATION for free spawned molecules ──
+      // After the user releases a drag, smoothly interpolate each atom back to
+      // its correct position (centroid + stored relative offset) so the molecule
+      // snaps cleanly back to its resting geometry, just like committedCompound does.
+      if (freeMoleculeSettle.current && !dragId.current) {
+        const { groupId, targets } = freeMoleculeSettle.current;
+        const groupAtoms = atoms.filter(a => a.spawnGroupId === groupId);
+        let allSettled = true;
+
+        for (const a of groupAtoms) {
+          const target = targets.get(a.id);
+          if (!target) continue;
+          const dx = target.x - a.x;
+          const dy = target.y - a.y;
+          a.x += dx * 0.14;
+          a.y += dy * 0.14;
+          a.vx = 0;
+          a.vy = 0;
+          if (Math.hypot(dx, dy) > 0.8) allSettled = false;
+        }
+
+        if (allSettled) freeMoleculeSettle.current = null;
+      }
+
+      // ── SPRING DRAG for free spawned molecules (spawnGroupId) ──
+      // When an atom belonging to a bonded free molecule is dragged, propagate
+      // forces through its bonds so the whole molecule follows with a gooey,
+      // elastic feel — matching the same spring behaviour committed compounds have.
+      if (dragId.current) {
+        const draggedAtom = atoms.find(a => a.id === dragId.current);
+        if (draggedAtom && draggedAtom.spawnGroupId) {
+          const groupId = draggedAtom.spawnGroupId;
+          const groupAtoms = atoms.filter(a => a.spawnGroupId === groupId);
+          const groupAtomIds = new Set(groupAtoms.map(a => a.id));
+
+          const K_SPRING = 0.32;  // spring stiffness
+          const DAMPING  = 0.70;  // velocity decay per frame
+
+          // Damp all non-dragged atoms in this molecule each frame
+          for (const a of groupAtoms) {
+            if (a.id !== dragId.current) { a.vx *= DAMPING; a.vy *= DAMPING; }
+          }
+
+          // Apply Hooke's law spring forces along each bond in this molecule
+          for (const bd of bondsRef.current) {
+            if (!groupAtomIds.has(bd.a) || !groupAtomIds.has(bd.b)) continue;
+            const atomA = groupAtoms.find(a => a.id === bd.a);
+            const atomB = groupAtoms.find(a => a.id === bd.b);
+            if (!atomA || !atomB) continue;
+
+            const dx = atomB.x - atomA.x;
+            const dy = atomB.y - atomA.y;
+            const dist = Math.hypot(dx, dy) || 1;
+
+            const key1 = `${atomA.id}-${atomB.id}`;
+            const key2 = `${atomB.id}-${atomA.id}`;
+            const rest = bondRestLengths.current.get(key1) || bondRestLengths.current.get(key2) || dist;
+
+            const stretch = (dist - rest) * K_SPRING;
+            const fx = (dx / dist) * stretch;
+            const fy = (dy / dist) * stretch;
+
+            if (atomA.id !== dragId.current) { atomA.vx += fx; atomA.vy += fy; }
+            if (atomB.id !== dragId.current) { atomB.vx -= fx; atomB.vy -= fy; }
+          }
+
+          // Integrate positions for non-dragged group atoms
+          for (const a of groupAtoms) {
+            if (a.id === dragId.current) continue;
+            a.x += a.vx;
+            a.y += a.vy;
+          }
+        }
+      }
+
+      // Determine which spawnGroup is currently being spring-dragged (to avoid
+      // double-integrating those atoms in the generic loop below)
+      const draggedGroupId = dragId.current
+        ? (atoms.find(a => a.id === dragId.current)?.spawnGroupId ?? null)
+        : null;
+
       for (const a of atoms) {
         if (a.id === dragId.current) continue;
+        if (draggedGroupId && a.spawnGroupId === draggedGroupId) continue; // already handled above
         a.vx *= 0.78;
         a.vy *= 0.78;
       }
@@ -665,6 +746,7 @@ export default function ChemLabCanvas() {
         const H = canvas.height / zoomRef.current;
         for (const a of atoms) {
           if (a.id === dragId.current) continue;
+          if (draggedGroupId && a.spawnGroupId === draggedGroupId) continue; // already handled above
           if (a.x < -W / 2 + 30) a.vx += 0.5;
           if (a.x > W / 2 - 30) a.vx -= 0.5;
           if (a.y < -H / 2 + 30) a.vy += 0.5;
@@ -1213,6 +1295,32 @@ export default function ChemLabCanvas() {
         isStable.current = false;
       }
     }
+
+    // ── Shape restoration for free spawned molecules after drag release ──
+    // When a bonded free molecule (not yet reacted) is dragged and released,
+    // compute new absolute targets from the current centroid + each atom's
+    // stored ideal relative offset, then kick off the settle animation.
+    if (wasDragging && !committedCompound.current) {
+      const draggedAtom = atomsRef.current.find(a => a.id === wasDragging);
+      if (draggedAtom && draggedAtom.spawnGroupId && draggedAtom.spawnRelativePos) {
+        const groupId = draggedAtom.spawnGroupId;
+        const groupAtoms = atomsRef.current.filter(a => a.spawnGroupId === groupId);
+
+        // New centroid is where the atoms actually are now
+        const cx = groupAtoms.reduce((s, a) => s + a.x, 0) / groupAtoms.length;
+        const cy = groupAtoms.reduce((s, a) => s + a.y, 0) / groupAtoms.length;
+
+        // Absolute targets = centroid + each atom's original relative offset
+        const targets = new Map();
+        groupAtoms.forEach(a => {
+          if (a.spawnRelativePos) {
+            targets.set(a.id, { x: cx + a.spawnRelativePos.x, y: cy + a.spawnRelativePos.y });
+          }
+        });
+
+        freeMoleculeSettle.current = { groupId, targets };
+      }
+    }
   };
 
   const handleCanvasMouseLeave = () => {
@@ -1531,6 +1639,14 @@ export default function ChemLabCanvas() {
         spawnParticles(pos.x, pos.y, el?.color || 0xcccccc, 8);
       });
 
+      // Record each atom's ideal offset from the group centroid so we can
+      // restore the molecule's shape after the user releases a drag.
+      const cx0 = spawnedAtoms.reduce((s, a) => s + a.x, 0) / spawnedAtoms.length;
+      const cy0 = spawnedAtoms.reduce((s, a) => s + a.y, 0) / spawnedAtoms.length;
+      spawnedAtoms.forEach(a => {
+        a.spawnRelativePos = { x: a.x - cx0, y: a.y - cy0 };
+      });
+
       blueprint.bonds.forEach((bd) => {
         const atomA = spawnedAtoms[bd.from];
         const atomB = spawnedAtoms[bd.to];
@@ -1603,7 +1719,9 @@ export default function ChemLabCanvas() {
       subFormula = coefMatch[2];
     }
 
-    const subAtoms = expandFormulaToAtoms(subFormula);
+    // Canonicalize the formula string (e.g. ClH -> HCl)
+    const canonicalSubFormula = canonicalizeFormulaString(subFormula);
+    const subAtoms = expandFormulaToAtoms(canonicalSubFormula);
     if (subAtoms.length === 0) return;
 
     // Reset transient visual state
@@ -1622,7 +1740,7 @@ export default function ChemLabCanvas() {
     if (subAtoms.length <= 1) {
       const spacingRadius = 0;
       const center = findFreePlacement(0, 0, spacingRadius);
-      spawnMoleculeAtPosition(subFormula, null, center);
+      spawnMoleculeAtPosition(canonicalSubFormula, null, center);
       setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
       return;
     }
@@ -1635,7 +1753,7 @@ export default function ChemLabCanvas() {
       const blueprint = await findCompoundEntry(fp, subAtoms);
 
       if (!blueprint) {
-        throw new Error(`Could not verify structure for "${subFormula}"`);
+        throw new Error(`Could not verify structure for "${canonicalSubFormula}"`);
       }
 
       setPubchemStatus(null);
@@ -1661,14 +1779,14 @@ export default function ChemLabCanvas() {
         }
 
         const blueprintWithTarget = { ...blueprint, targetPositions };
-        spawnMoleculeAtPosition(subFormula, blueprintWithTarget, center);
+        spawnMoleculeAtPosition(canonicalSubFormula, blueprintWithTarget, center);
       }
 
       setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
     } catch (err) {
       console.warn(`[Verified Spawn] Blueprint lookup failed for ${formula}, falling back to loose atoms:`, err.message);
       setPubchemStatus("not-found");
-      setReactionEquation(`Could not verify "${subFormula}" as a stable molecule. Spawning separate atoms.`);
+      setReactionEquation(`Could not verify "${canonicalSubFormula}" as a stable molecule. Spawning separate atoms.`);
       
       const spacingRadius = Math.max(80, subAtoms.length * 28);
       for (let c = 0; c < coef; c++) {
@@ -1677,7 +1795,7 @@ export default function ChemLabCanvas() {
           ? { x: Math.max(...existing.map((a) => a.x)) + spacingRadius + 100, y: 0 }
           : { x: 0, y: 0 };
         const center = findFreePlacement(desired.x, desired.y, spacingRadius);
-        spawnMoleculeAtPosition(subFormula, null, center);
+        spawnMoleculeAtPosition(canonicalSubFormula, null, center);
       }
       setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
     }
@@ -1706,31 +1824,71 @@ export default function ChemLabCanvas() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selected]);
 
-  // ── Unlock ONE loc  // ── Start Reaction ──
-  const startReaction = async () => {
+  // ── Start Reaction ──
+  // Flow: REACTIONS cache → AI prediction → execute/persist.
+  // PubChem is never used for reaction prediction.
+  // The atom-assembly sandbox (loose atoms) is preserved for compound bonding.
+  const startReaction = () => {
     const atoms = atomsRef.current;
     if (atoms.length < 2) {
       setReactionEquation("Please add at least 2 atoms to start an experiment.");
       return;
     }
 
-    setPubchemStatus("searching");
-    setReactionEquation("Checking database for reactions...");
-
-    // 1. Sync fresh reactions from Supabase
-    try {
-      await initializeReactionStore();
-    } catch (err) {
-      console.warn("Could not sync reaction database before run:", err.message);
-    }
-
-    // ── Molecule-level reaction check (REACTIONS database) ──
+    // ── Step 1: Molecule-level reaction check (in-memory REACTIONS cache) ──
     const moleculeEngineResult = runReactionEngine(atoms, bondsRef.current);
+
     if (moleculeEngineResult.status === REACTION_ENGINE_STATUS.REACTION) {
+      // Cache hit — execute immediately
       handleMoleculeReaction(moleculeEngineResult);
       return;
     }
 
+    if (moleculeEngineResult.status === REACTION_ENGINE_STATUS.NO_REACTION) {
+      // Formed molecules exist but no cached reaction matches.
+      // ── Step 2: Ask AI to predict the reaction ──
+      const reactantFormulas = moleculeEngineResult.reactantFormulas;
+      setPubchemStatus("ai-generating");
+      setReactionEquation("AI is analyzing the chemical reaction...");
+
+      predictReactionWithAI(reactantFormulas)
+        .then((aiEntry) => {
+          if (!aiEntry) {
+            setPubchemStatus("not-found");
+            setReactionEquation("No reaction possible with the current reactants.");
+            return;
+          }
+
+          console.log(`[AI Predictor] Predicted reaction: ${aiEntry.name}`);
+
+          // Register the AI-predicted reaction in the in-memory cache
+          registerReaction(aiEntry);
+
+          // Persist to Supabase for future startups (best-effort, non-blocking)
+          persistReactionToSupabase(aiEntry).catch(() => {});
+
+          // Re-run the engine — it will now find the freshly registered entry
+          const rerunResult = runReactionEngine(atoms, bondsRef.current);
+          if (rerunResult.status === REACTION_ENGINE_STATUS.REACTION) {
+            handleMoleculeReaction(rerunResult);
+          } else {
+            // AI predicted a reaction but the engine couldn't match molecules
+            // (e.g. the AI returned different formula spellings). Show the
+            // prediction as a toast anyway, but don't destroy canvas state.
+            setPubchemStatus("not-found");
+            setReactionEquation(`AI predicted: ${aiEntry.name}, but molecules could not be matched.`);
+          }
+        })
+        .catch((err) => {
+          console.warn("[AI Predictor] Error:", err.message);
+          setPubchemStatus("not-found");
+          setReactionEquation("No reaction possible with the current reactants.");
+        });
+
+      return;
+    }
+
+    // ── Step 3: NO_MOLECULES — loose atoms, fall through to atom-assembly sandbox ──
     setPubchemStatus("searching");
     setReactionEquation("Analyzing experiment...");
 
@@ -1840,13 +1998,7 @@ export default function ChemLabCanvas() {
           results.push(formula);
         });
 
-        const sortedAtoms = Object.keys(individualCounts).sort((a, b) => {
-          if (a === "C") return -1;
-          if (b === "C") return 1;
-          if (a === "H") return -1;
-          if (b === "H") return 1;
-          return a.localeCompare(b);
-        });
+        const sortedAtoms = canonicalElementOrder(Object.keys(individualCounts));
         sortedAtoms.forEach((sym) => {
           const count = individualCounts[sym];
           const display = count > 1 ? `${count}${sym}` : sym;
@@ -1883,9 +2035,9 @@ export default function ChemLabCanvas() {
       if (status === "not-found") {
         setReactionEquation("No reaction possible with the current reactants.");
       } else if (status === "searching") {
-        setReactionEquation("Searching PubChem for reaction data...");
+        setReactionEquation("Analyzing compound structure...");
       } else if (status === "ai-generating") {
-        setReactionEquation("Gemini is analyzing the chemical reaction...");
+        setReactionEquation("AI is analyzing the compound structure...");
       }
     };
 

@@ -34,14 +34,14 @@ export function* generateCandidateFormulas(symCounts) {
   }
 }
 
+import { canonicalFormulaFromSyms } from "../formulaParser";
+
 export function formulaFromCounts(counts) {
-  // Standard Hill order: C first, H second, then alphabetical
-  const keys = Object.keys(counts).filter(k => counts[k] > 0).sort((a, b) => {
-    if (a === 'C') return -1; if (b === 'C') return 1;
-    if (a === 'H') return -1; if (b === 'H') return 1;
-    return a.localeCompare(b);
-  });
-  return keys.map(k => `${k}${counts[k] > 1 ? counts[k] : ''}`).join('');
+  const syms = [];
+  for (const [sym, n] of Object.entries(counts)) {
+    for (let i = 0; i < n; i++) syms.push(sym);
+  }
+  return canonicalFormulaFromSyms(syms);
 }
 
 export function fingerprintFromCounts(counts) {

@@ -4,22 +4,12 @@
 // the molecule-based reaction engine can work with formulas instead of atoms.
 import { COMPOUND_BLUEPRINTS } from "./reactionStore";
 import { fingerprint } from "./fingerprint";
+import { canonicalFormulaFromSyms } from "../formulaParser";
 
-// Standard Hill order (C first, H second, then alphabetical) formula string
-// from a flat list of atom symbols, e.g. ["Na","Cl"] -> "NaCl",
-// ["H","H","O"] -> "H2O". Shared by every place that needs to turn "a bag of
-// atom symbols" into a canonical formula string — used ONLY for display /
-// identification, never to synthesize reaction products.
+// Authoritative formula string from a flat list of atom symbols.
+// Returns a canonical ASCII formula string (e.g. "NaCl", "H2O").
 export function formulaFromSyms(syms) {
-  const counts = {};
-  for (const s of syms) counts[s] = (counts[s] || 0) + 1;
-  const hillKeys = Object.keys(counts).sort((a, b) => {
-    if (a === "C") return -1; if (b === "C") return 1;
-    if (a === "H") return -1; if (b === "H") return 1;
-    return a.localeCompare(b);
-  });
-  const sub = { 1: "", 2: "₂", 3: "₃", 4: "₄", 5: "₅", 6: "₆", 7: "₇", 8: "₈", 9: "₉" };
-  return hillKeys.map((k) => `${k}${sub[counts[k]] ?? counts[k]}`).join("");
+  return canonicalFormulaFromSyms(syms);
 }
 
 export function getMoleculeForAtom(atomId, atoms, bonds) {

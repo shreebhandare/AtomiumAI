@@ -4,7 +4,7 @@
 // the diagnostics panel, AI explanations, and any future history/export UI.
 // Every surface should call getCanonicalEquation(entry) rather than formatting
 // reactants/products itself, so a formula never renders two different ways.
-import { parseFormula } from "../formulaParser";
+import { parseFormula, canonicalElementOrder } from "../formulaParser";
 import { expandProducts } from "./moleculeReactionResolver";
 
 const SUB_DIGITS = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉" };
@@ -151,16 +151,10 @@ export function getExperimentEquation(entry, alignedAtoms) {
     const rawCounts = {};
     for (const s of entry.reactants) rawCounts[s] = (rawCounts[s] || 0) + 1;
 
-    const hillSort = (a, b) => {
-      if (a === "C") return -1;
-      if (b === "C") return 1;
-      if (a === "H") return -1;
-      if (b === "H") return 1;
-      return a.localeCompare(b);
-    };
+    const uniqueSyms = Object.keys(rawCounts);
+    const sortedSyms = canonicalElementOrder(uniqueSyms);
 
-    const reactantSide = Object.keys(rawCounts)
-      .sort(hillSort)
+    const reactantSide = sortedSyms
       .map((sym) => {
         const count = rawCounts[sym];
         const coeffStr = count > 1 ? String(count) : "";
@@ -205,14 +199,14 @@ export function getExperimentEquation(entry, alignedAtoms) {
     }
   }
 
-  // 3. Sort reactants alphabetically for consistent display
+  // 3. Sort reactants canonically/alphabetically for consistent display
   const reactantNames = Object.keys(reactantCounts).sort((a, b) => a.localeCompare(b));
 
   const reactantSide = reactantNames
     .map((name) => {
       const count = reactantCounts[name];
       const coeffStr = count > 1 ? String(count) : "";
-      return `${coeffStr}${name}`;
+      return `${coeffStr}${formatFormulaUnicode(name)}`;
     })
     .join(" + ");
 
