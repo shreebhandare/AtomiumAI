@@ -40,6 +40,7 @@ import { runInventorySearch, findCompoundEntry } from "./lookup/reactionResoluti
 import { getCanonicalEquation, getExperimentEquation, formatFormulaUnicode, buildMoleculeEquation, getProductsLabel } from "./chemistry/equationBuilder";
 import { runReactionEngine, REACTION_ENGINE_STATUS } from "./chemistry/reactionEngine";
 import { expandProducts } from "./chemistry/moleculeReactionResolver";
+import { initializeReactionStore } from "./chemistry/initializeReactionStore";
 
 // ───────────────────────── MAIN COMPONENT ─────────────────────────
 export default function ChemLabCanvas() {
@@ -1706,11 +1707,21 @@ export default function ChemLabCanvas() {
   }, [selected]);
 
   // ── Unlock ONE loc  // ── Start Reaction ──
-  const startReaction = () => {
+  const startReaction = async () => {
     const atoms = atomsRef.current;
     if (atoms.length < 2) {
       setReactionEquation("Please add at least 2 atoms to start an experiment.");
       return;
+    }
+
+    setPubchemStatus("searching");
+    setReactionEquation("Checking database for reactions...");
+
+    // 1. Sync fresh reactions from Supabase
+    try {
+      await initializeReactionStore();
+    } catch (err) {
+      console.warn("Could not sync reaction database before run:", err.message);
     }
 
     // ── Molecule-level reaction check (REACTIONS database) ──
