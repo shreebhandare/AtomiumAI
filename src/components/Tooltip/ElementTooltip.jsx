@@ -4,6 +4,49 @@ import { getGroupStyles } from "../../data/elements";
 // viewport level (not inside any scrolling container) to avoid layout shift.
 export default function ElementTooltip({ hoveredElement }) {
   if (!hoveredElement) return null;
+
+  if (hoveredElement.isBond) {
+    return (
+      <div style={{
+        position: "fixed",
+        left: hoveredElement.x,
+        top: hoveredElement.y,
+        transform: "translate(-50%, -120%)",
+        background: "var(--clb-bg-panel, #ffffff)",
+        border: "1px solid var(--clb-border, #cbd5e1)",
+        borderRadius: 8,
+        padding: "6px 12px",
+        boxShadow: "0 6px 20px rgba(0,0,0,0.1)",
+        pointerEvents: "none",
+        color: "var(--clb-text-primary, #0f172a)",
+        fontSize: 12,
+        fontWeight: 600,
+        zIndex: 999999,
+        fontFamily: "'Space Grotesk', sans-serif",
+        transition: "background 0.3s ease, border-color 0.3s ease"
+      }}>
+        {/* Small arrow */}
+        <div style={{
+          position: "absolute",
+          top: "100%",
+          left: "50%",
+          transform: "translateX(-50%)",
+          border: "5px solid transparent",
+          borderTopColor: "var(--clb-border, #cbd5e1)"
+        }} />
+        <div style={{
+          position: "absolute",
+          top: "100%",
+          left: "50%",
+          transform: "translateX(-50%) translate(0, -1px)",
+          border: "5px solid transparent",
+          borderTopColor: "var(--clb-bg-panel, #ffffff)"
+        }} />
+        {hoveredElement.text}
+      </div>
+    );
+  }
+
   return (
         <div style={{
           position: "fixed",

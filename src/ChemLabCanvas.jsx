@@ -27,7 +27,7 @@ import {
   bumpInventorySearchGeneration, getInventorySearchGeneration,
   setSearchOnlineEnabled,
 } from "./chemistry/reactionStore";
-import { getMoleculeForAtom, alignAtomsToReactants } from "./chemistry/moleculeGraph";
+import { getMoleculeForAtom, alignAtomsToReactants, identifyMolecules } from "./chemistry/moleculeGraph";
 import { NUCLEUS_R, shellRadius } from "./chemistry/physics";
 import { pickAtomsForEntry } from "./chemistry/reactionResolver";
 import {
@@ -141,22 +141,6 @@ export default function ChemLabCanvas() {
     };
     return themes[theme] || themes.light;
   }, [theme]);
-  // Upgrade #4.2.3: "Reading bonds in Simple Mode" modal explaining bond
-  // notation. Shown every time Simple Mode is opened (i.e. every transition
-  // INTO "simple" from some other mode) rather than once-ever — prevRef lets
-  // us detect that transition instead of firing on every render while already
-  // in Simple mode.
-  const [showSimpleLegend, setShowSimpleLegend] = useState(false);
-  const prevVisualModeRef = useRef(visualMode);
-  useEffect(() => {
-    if (visualMode === "simple" && prevVisualModeRef.current !== "simple") {
-      setShowSimpleLegend(true);
-    }
-    prevVisualModeRef.current = visualMode;
-  }, [visualMode]);
-  const dismissSimpleLegend = () => {
-    setShowSimpleLegend(false);
-  };
   const [tempK, setTempK] = useState(298);
   const [pressureAtm, setPressureAtm] = useState(1);
   const [selected, setSelected] = useState(null);
@@ -194,6 +178,7 @@ export default function ChemLabCanvas() {
   const [counts, setCounts] = useState({ atoms: 0, bonds: 0 });
   const [zoom, setZoom] = useState(1);
   const [hoveredElement, setHoveredElement] = useState(null); // { el, x, y }
+  const hoveredElementRef = useLiveRef(hoveredElement);
   const [formulaInput, setFormulaInput] = useState("");
   const formulaInputRef = useLiveRef(formulaInput);
 
@@ -215,6 +200,7 @@ export default function ChemLabCanvas() {
   const committedCompound = useRef(null); // { fp, entry, aligned, targetPositions }
   const isStable = useRef(false);
   const lastInventoryFp = useRef(null); // fingerprint of last committed inventory
+  const stableTimeRef = useRef(null);
 
   const [reactionEquation, setReactionEquation] = useState("Awaiting reactants... Build your experiment and click Start.");
   const [equationMode, setEquationMode] = useState("experiment"); // "experiment" | "standard"
@@ -344,6 +330,28 @@ export default function ChemLabCanvas() {
     });
   }, []);
 
+  // ── 3D mode: distinct molecule selection ──
+  const [selected3DMoleculeIndex, setSelected3DMoleculeIndex] = useState(0);
+  const distinctMolecules = useMemo(() => {
+    return identifyMolecules(atomsRef.current, bondsRef.current);
+  }, [counts.atoms, counts.bonds]);
+  // Reset selection if it falls out of bounds
+  useEffect(() => {
+    if (selected3DMoleculeIndex >= distinctMolecules.length && distinctMolecules.length > 0) {
+      setSelected3DMoleculeIndex(0);
+    }
+  }, [distinctMolecules.length, selected3DMoleculeIndex]);
+
+  // Auto-clear pubchemStatus search notifications 5 seconds after they complete
+  useEffect(() => {
+    if (pubchemStatus && (pubchemStatus.startsWith("found:") || pubchemStatus === "not-found")) {
+      const timer = setTimeout(() => {
+        setPubchemStatus(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [pubchemStatus]);
+
   // ── 3D data-fetching effect: populates viewer3dSdf / viewer3dXyz ──
   const fetch3DDebounceRef = useRef(null);
   // Upgrade #4.3.1: cache PubChem 3D results per compound (keyed by CID, or
@@ -359,10 +367,25 @@ export default function ChemLabCanvas() {
     }
 
     const fetch3DData = async () => {
-      const compound = committedCompound.current;
-      const entryName = compound?.entry?.name || "";
-      const entryFormula = compound?.entry?.formula || "";
-      const cacheKey = compound?.entry?.cid ? `cid:${compound.entry.cid}` : entryName ? `name:${entryName}` : null;
+      const allAtoms = atomsRef.current;
+      const allBonds = bondsRef.current;
+      const molecules = identifyMolecules(allAtoms, allBonds);
+      const selIdx = Math.min(selected3DMoleculeIndex, molecules.length - 1);
+      const selMol = molecules[selIdx >= 0 ? selIdx : 0];
+
+      if (!selMol) {
+        setViewer3dSdf("");
+        setViewer3dXyz("");
+        setViewer3dTitle("");
+        return;
+      }
+
+      // Check blueprint if available
+      const blueprint = selMol.blueprint;
+      const entryName = blueprint?.name || selMol.name || "";
+      const entryFormula = blueprint?.formula || selMol.formula || "";
+      const cid = blueprint?.cid || null;
+      const cacheKey = cid ? `cid:${cid}` : entryName ? `name:${entryName}` : null;
 
       if (cacheKey && threeDCacheRef.current.has(cacheKey)) {
         const cached = threeDCacheRef.current.get(cacheKey);
@@ -373,9 +396,9 @@ export default function ChemLabCanvas() {
       }
 
       // ── Attempt 1: PubChem 3D conformer by CID ────────────────────────
-      if (compound?.entry?.cid) {
+      if (cid) {
         try {
-          const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${compound.entry.cid}/SDF?record_type=3d`;
+          const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/SDF?record_type=3d`;
           const res = await fetch(url);
           if (!res.ok) throw new Error("CID 3D SDF not found");
           const sdf = await res.text();
@@ -409,16 +432,16 @@ export default function ChemLabCanvas() {
       }
 
       // ── Attempt 3: Local tetrahedral 3D layout from canvas atoms + bonds
-      // (not cached — it's derived from live canvas atoms/bonds, not a stable
-      // compound identity, so there's nothing meaningful to key it on)
-      const atoms = atomsRef.current;
-      if (atoms.length > 0) {
-        const xyz = build3DXYZFallback(atoms, bondsRef.current);
+      const molAtomIds = new Set(selMol.atomIds);
+      const filteredAtoms = allAtoms.filter(a => molAtomIds.has(a.id));
+      const filteredBonds = allBonds.filter(b => molAtomIds.has(b.a) && molAtomIds.has(b.b));
+      if (filteredAtoms.length > 0) {
+        const xyz = build3DXYZFallback(filteredAtoms, filteredBonds);
         setViewer3dXyz(xyz);
         setViewer3dSdf("");
         setViewer3dTitle(
           entryName || entryFormula ||
-          (atoms.length === 1 ? atoms[0].sym : "Canvas Molecule")
+          (filteredAtoms.length === 1 ? filteredAtoms[0].sym : "Canvas Molecule")
         );
       }
     };
@@ -429,7 +452,7 @@ export default function ChemLabCanvas() {
     clearTimeout(fetch3DDebounceRef.current);
     fetch3DDebounceRef.current = setTimeout(fetch3DData, 400);
     return () => clearTimeout(fetch3DDebounceRef.current);
-  }, [visualMode, counts.atoms, counts.bonds]);
+  }, [visualMode, counts.atoms, counts.bonds, selected3DMoleculeIndex]);
 
   const modeRef = useLiveRef(mode);
   const visualModeRef = useLiveRef(visualMode);
@@ -439,6 +462,8 @@ export default function ChemLabCanvas() {
   // Upgrade #4.1.4: electron orbit animation speed control (Bohr mode slider).
   const [orbitSpeed, setOrbitSpeed] = useState(1);
   const orbitSpeedRef = useLiveRef(orbitSpeed);
+
+
   // Upgrade #5.1: slow-motion / step-by-step physics. simSpeed scales the dt
   // fed into physicsTick each frame — 1 = normal, <1 = slow motion, 0 = fully
   // paused (physics frozen; step advances exactly one fixed tick on demand).
@@ -466,6 +491,19 @@ export default function ChemLabCanvas() {
     if (modeRef.current !== "running") return;
 
     if (committedCompound.current) {
+      if (isStable.current) {
+        if (stableTimeRef.current === null) {
+          stableTimeRef.current = performance.now();
+        }
+        // If it has been stable for over 5 seconds, clear the diagnostics banner
+        if (performance.now() - stableTimeRef.current > 5000) {
+          setDiagnostics([]);
+          return;
+        }
+      } else {
+        stableTimeRef.current = null;
+      }
+
       const { entry } = committedCompound.current;
       const labelStr = isStable.current ? "Stable Molecule" : "Optimizing Layout...";
       setDiagnostics([{
@@ -476,6 +514,7 @@ export default function ChemLabCanvas() {
         issues: [{ type: "info", label: labelStr, detail: "", severity: "low" }],
       }]);
     } else {
+      stableTimeRef.current = null;
       setDiagnostics([]);
     }
   }, []);
@@ -673,6 +712,14 @@ export default function ChemLabCanvas() {
       grad.addColorStop(0, colorA);
       grad.addColorStop(1, colorB);
 
+      // Determine highlight state
+      const isHoveredAtomA = hoveredElementRef.current && !hoveredElementRef.current.isBond && hoveredElementRef.current.atomId === atomA.id;
+      const isHoveredAtomB = hoveredElementRef.current && !hoveredElementRef.current.isBond && hoveredElementRef.current.atomId === atomB.id;
+      const isHoveredBond = hoveredElementRef.current && hoveredElementRef.current.isBond && 
+        (hoveredElementRef.current.bondKey === `${bd.a}-${bd.b}` || hoveredElementRef.current.bondKey === `${bd.b}-${bd.a}`);
+      
+      const isHighlighted = isHoveredAtomA || isHoveredAtomB || isHoveredBond;
+
       const offsets = order === 1 ? [0] : order === 2 ? [-3, 3] : [-5, 0, 5];
       offsets.forEach((off) => {
         const px = -ny * off, py = nx * off;
@@ -680,8 +727,9 @@ export default function ChemLabCanvas() {
         ctx.moveTo(atomA.x + px, atomA.y + py);
         ctx.lineTo(atomB.x + px, atomB.y + py);
         ctx.strokeStyle = grad;
-        ctx.lineWidth = 2;
-        ctx.globalAlpha = 0.8;
+        // In simple 2D mode, bonds are subtle by default, fully visible on hover/highlight
+        ctx.lineWidth = isHighlighted ? 2.5 : (vmode === "simple" ? 1.5 : 2);
+        ctx.globalAlpha = isHighlighted ? 0.95 : (vmode === "simple" ? 0.15 : 0.8);
         // Ionic bonds are electrostatic attraction, not a shared electron pair —
         // rendered dashed to visually distinguish from solid covalent bonds
         // (explained in the Simple Mode one-time legend).
@@ -1042,18 +1090,52 @@ export default function ChemLabCanvas() {
       return;
     }
     if (!dragId.current) {
-      // Upgrade #4.1.2 / #4.2.2: hover tooltip on canvas atoms (not just the
-      // periodic-table tray), showing the shell breakdown in Bohr mode.
       const { x, y } = worldPos(e.clientX, e.clientY);
       const hovered = atomsRef.current.find((a) => Math.hypot(a.x - x, a.y - y) < 30);
       if (hovered) {
         const el = getElement(hovered.sym);
         setHoveredElement({
           el, x: e.clientX, y: e.clientY,
+          atomId: hovered.id,
           shells: visualModeRef.current === "bohr" ? hovered.shells : null,
         });
       } else {
-        setHoveredElement(null);
+        // Check for hovered bond (Simple 2D mode specific feature)
+        let hoveredBond = null;
+        for (const bd of bondsRef.current) {
+          const a1 = atomsRef.current.find((a) => a.id === bd.a);
+          const a2 = atomsRef.current.find((a) => a.id === bd.b);
+          if (!a1 || !a2) continue;
+          
+          const dx = a2.x - a1.x, dy = a2.y - a1.y;
+          const l2 = dx * dx + dy * dy;
+          if (l2 === 0) continue;
+          
+          let t = ((x - a1.x) * dx + (y - a1.y) * dy) / l2;
+          t = Math.max(0, Math.min(1, t));
+          const px = a1.x + t * dx;
+          const py = a1.y + t * dy;
+          const dist = Math.hypot(x - px, y - py);
+          if (dist < 8) {
+            hoveredBond = bd;
+            break;
+          }
+        }
+        
+        if (hoveredBond) {
+          const typeStr = hoveredBond.type === "ionic" ? "Ionic" : "Covalent";
+          const order = Number(hoveredBond.order);
+          const orderStr = order === 3 ? "Triple" : order === 2 ? "Double" : "Single";
+          setHoveredElement({
+            isBond: true,
+            text: `${orderStr} ${typeStr} Bond`,
+            x: e.clientX,
+            y: e.clientY,
+            bondKey: `${hoveredBond.a}-${hoveredBond.b}`
+          });
+        } else {
+          setHoveredElement(null);
+        }
       }
     }
     if (!dragId.current) return;
@@ -1385,7 +1467,7 @@ export default function ChemLabCanvas() {
               bondsRef.current.push({
                 id: bondId,
                 a: atomA.id, b: atomB.id,
-                order: bd.order, type: bd.type || 'covalent',
+                order: Number(bd.order) || 1, type: bd.type || 'covalent',
                 enA: elA?.en ?? 1.0, enB: elB?.en ?? 1.0,
               });
 
@@ -1492,7 +1574,7 @@ export default function ChemLabCanvas() {
         return {
           id: `${atomA.id}-${atomB.id}`,
           a: atomA.id, b: atomB.id,
-          order: bd.order, type: bd.type || 'covalent',
+          order: Number(bd.order) || 1, type: bd.type || 'covalent',
           enA: elA?.en ?? 1.0, enB: elB?.en ?? 1.0,
         };
       });
@@ -1815,8 +1897,11 @@ export default function ChemLabCanvas() {
             canvasRef={canvasRef} handleMouseDown={handleMouseDown} handleMouseMove={handleMouseMove}
             handleMouseUp={handleMouseUp} handleMouseLeave={handleCanvasMouseLeave} handleWheel={handleWheel} handleDrop={handleDrop}
             zoom={zoom} setZoom={setZoom} fitAll={fitAll} resetView={resetView}
-            showSimpleLegend={showSimpleLegend} dismissSimpleLegend={dismissSimpleLegend}
             reactionToasts={reactionToasts} dismissReactionToast={dismissReactionToast}
+            orbitSpeed={orbitSpeed} setOrbitSpeed={setOrbitSpeed}
+            distinctMolecules={distinctMolecules}
+            selected3DMoleculeIndex={selected3DMoleculeIndex}
+            setSelected3DMoleculeIndex={setSelected3DMoleculeIndex}
           />
 
           {/* REACTIONS BAR */}

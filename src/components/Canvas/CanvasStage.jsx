@@ -10,8 +10,10 @@ export default function CanvasStage({
   diagnostics, pubchemStatus, counts, formulaInput, visualMode,
   viewer3dSdf, viewer3dXyz, viewer3dTitle,
   canvasRef, handleMouseDown, handleMouseMove, handleMouseUp, handleMouseLeave, handleWheel, handleDrop,
-  zoom, setZoom, fitAll, resetView, showSimpleLegend, dismissSimpleLegend,
+  zoom, setZoom, fitAll, resetView,
   reactionToasts, dismissReactionToast,
+  orbitSpeed, setOrbitSpeed,
+  distinctMolecules, selected3DMoleculeIndex, setSelected3DMoleculeIndex,
 }) {
   return (
     <>
@@ -82,6 +84,9 @@ export default function CanvasStage({
                   sdfData={viewer3dSdf}
                   xyzData={viewer3dXyz}
                   title={viewer3dTitle}
+                  distinctMolecules={distinctMolecules}
+                  selected3DMoleculeIndex={selected3DMoleculeIndex}
+                  setSelected3DMoleculeIndex={setSelected3DMoleculeIndex}
                 />
               </div>
             )}
@@ -96,8 +101,36 @@ export default function CanvasStage({
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
             />
-            {showSimpleLegend && visualMode === "simple" && (
-              <SimpleModeLegend onDismiss={dismissSimpleLegend} />
+            {visualMode === "simple" && <SimpleModeLegend />}
+            {/* Bohr mode orbit-speed control overlay */}
+            {visualMode === "bohr" && (
+              <div style={{
+                position: "absolute", bottom: 14, left: 14, zIndex: 20,
+                background: "var(--clb-bg-panel, rgba(255,255,255,0.85))",
+                backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+                border: "1px solid var(--clb-border, #e2e8f0)",
+                borderRadius: 12, padding: "10px 16px",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
+                display: "flex", flexDirection: "column", gap: 6,
+                transition: "background 0.3s ease, border-color 0.3s ease",
+                fontFamily: "'Space Grotesk', sans-serif",
+                minWidth: 170,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--clb-text-secondary, #64748b)", letterSpacing: 0.5 }}>⚡ ORBIT SPEED</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--clb-text-primary, #0f172a)", fontFamily: "'Space Mono', monospace" }}>{orbitSpeed.toFixed(1)}×</span>
+                </div>
+                <input
+                  type="range" min="0.1" max="3" step="0.1"
+                  value={orbitSpeed}
+                  onChange={(e) => setOrbitSpeed(parseFloat(e.target.value))}
+                  style={{ width: "100%", accentColor: "#2563eb", cursor: "pointer" }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "var(--clb-text-muted, #94a3b8)" }}>
+                  <span>0.1×</span>
+                  <span>3.0×</span>
+                </div>
+              </div>
             )}
             <div style={{ position: "absolute", bottom: 12, right: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
               <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Space Mono', monospace", fontWeight: 600 }}>{Math.round(zoom * 100)}%</span>

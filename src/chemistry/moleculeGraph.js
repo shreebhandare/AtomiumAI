@@ -109,6 +109,7 @@ export function identifyMolecules(atoms, bonds) {
       name: blueprint?.name || formula,
       atomIds: componentIds,
       bondIds,
+      blueprint,
     });
   }
 

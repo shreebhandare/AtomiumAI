@@ -64,8 +64,24 @@ function buildStyleSpec(style) {
   }
 }
 
+// ─── Unicode Formula Formatter ────────────────────────────────────────────────
+function formatFormulaUnicode(formula) {
+  if (!formula) return "";
+  return formula.replace(/([A-Z][a-z]?)([0-9]+)/g, (m, sym, num) => {
+    const subs = {
+      "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄",
+      "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉"
+    };
+    const subNum = Array.from(num).map(c => subs[c] || c).join("");
+    return sym + subNum;
+  });
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
-export default function Molecule3DViewer({ modelData, format, sdfData, molData, xyzData, pdbData, title }) {
+export default function Molecule3DViewer({
+  modelData, format, sdfData, molData, xyzData, pdbData, title,
+  distinctMolecules = [], selected3DMoleculeIndex = 0, setSelected3DMoleculeIndex,
+}) {
   const containerRef  = useRef(null);
   const viewerRef     = useRef(null);   // $3Dmol viewer instance
   const rafRef        = useRef(null);   // pending requestAnimationFrame
@@ -286,15 +302,48 @@ export default function Molecule3DViewer({ modelData, format, sdfData, molData, 
         padding: "9px 14px", background: "#f8fafc",
         borderBottom: "1px solid #f1f5f9", flexShrink: 0,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <span style={{ fontSize: 15 }}>🧊</span>
-          <span style={{
-            fontSize: 12, fontWeight: 700, color: "#1e293b",
-            fontFamily: "'Space Grotesk', sans-serif", letterSpacing: 0.4,
-            textTransform: "uppercase",
-          }}>
-            {title || "3D Molecular Viewer"}
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <span style={{ fontSize: 15 }}>🧊</span>
+            <span style={{
+              fontSize: 12, fontWeight: 700, color: "#1e293b",
+              fontFamily: "'Space Grotesk', sans-serif", letterSpacing: 0.4,
+              textTransform: "uppercase",
+            }}>
+              {title || "3D Molecular Viewer"}
+            </span>
+          </div>
+
+          {/* Molecule Selection Dropdown */}
+          {distinctMolecules.length > 1 && setSelected3DMoleculeIndex && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: 0.5 }}>SELECT:</span>
+              <select
+                value={selected3DMoleculeIndex}
+                onChange={(e) => setSelected3DMoleculeIndex(parseInt(e.target.value))}
+                style={{
+                  ...btnBase,
+                  padding: "4px 24px 4px 8px",
+                  fontSize: 11.5,
+                  color: "#2563eb",
+                  borderColor: "#dbeafe",
+                  background: "#eff6ff url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%232563eb' viewBox='0 0 16 16'><path d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/></svg>\") no-repeat right 8px center",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  height: 28,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  boxShadow: "0 1px 2px rgba(37, 99, 235, 0.05)",
+                }}
+              >
+                {distinctMolecules.map((mol, idx) => (
+                  <option key={`opt-${idx}`} value={idx} style={{ color: "#334155" }}>
+                    {idx + 1}. {formatFormulaUnicode(mol.formula)} ({mol.atomIds.length} atoms)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         {activeFormat && (
           <span style={{
@@ -344,6 +393,13 @@ export default function Molecule3DViewer({ modelData, format, sdfData, molData, 
         {/* WebGL canvas host */}
         <div
           ref={containerRef}
+          onWheel={(e) => {
+            e.preventDefault();
+            if (!viewerRef.current) return;
+            const factor = e.deltaY < 0 ? 1.08 : 0.92;
+            viewerRef.current.zoom(factor);
+            scheduleRender();
+          }}
           style={{ width: "100%", height: "100%", cursor: "grab" }}
         />
 
