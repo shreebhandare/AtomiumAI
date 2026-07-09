@@ -11,8 +11,8 @@
 - **Draw bonds** between atoms by connecting them, then hit **▶ Start** to trigger real chemical reactions
 - **Formula spawning** — type `H2O`, `BaCl2`, `Ca(OH)2` and watch a complete molecule appear, atom-by-atom
 
-### 🤖 Gemini AI Assistant
-- **Built-in chat panel** powered by the Gemini API for chemistry Q&A and reaction explanations
+### 🤖 AI Assistant
+- **Built-in chat panel** powered by Fireworks AI for chemistry Q&A and reaction explanations
 - **AI-explained reactions** — every experiment result includes a plain-English chemical explanation
 - **Streaming responses** with a live cursor indicator
 
@@ -27,7 +27,7 @@ Switch between three rendering modes from the top bar:
 ### 🧬 Reaction Engine
 - **Offline reaction database** — 300+ pre-loaded chemical reactions
 - **PubChem live lookup** — if a combination is not in the local database, it queries PubChem in real time
-- **Gemini AI fallback** — unrecognised reactions are answered by Gemini and cached for the session
+- **Fireworks AI fallback** — unrecognised reactions are resolved by Fireworks and cached for the session
 - **Reaction toasts** — floating animated toast notifications show what's forming
 
 ### 📓 Lab Notebook
@@ -54,7 +54,7 @@ The periodic table drawer slides open from the bottom of the canvas — collapse
 
 ### Prerequisites
 - Node.js >= 18
-- A [Google Gemini API key](https://makersuite.google.com/app/apikey) *(optional — the app works without it using PubChem)*
+- A [Fireworks AI API key](https://fireworks.ai/) *(optional — the app works without it using PubChem)*
 
 ### Installation
 
@@ -69,12 +69,13 @@ npm install
 Create a `.env` file in the project root:
 
 ```env
-VITE_GEMINI_API_KEY=your_gemini_api_key_here
+VITE_FIREWORKS_API_KEY=your_fireworks_api_key_here
+VITE_FIREWORKS_MODEL=accounts/fireworks/models/llama-v3p3-70b-instruct   # optional
 VITE_SUPABASE_URL=your_supabase_url          # optional — for persistence
 VITE_SUPABASE_ANON_KEY=your_supabase_key     # optional
 ```
 
-> The app runs fully without the Supabase keys. Gemini key enables the AI chat panel and AI-explained reactions.
+> The app runs fully without the Supabase keys. Fireworks key enables the AI chat panel and AI-explained reactions.
 
 ### Run locally
 
@@ -107,7 +108,7 @@ src/
 │   ├── Header/              # HeaderBar — top nav, visualization tabs, settings modal
 │   ├── Canvas/              # CanvasStage — HTML5 canvas, zoom, pan, drag
 │   ├── Inspector/           # InspectorSidebar — atom inspector, lab notebook
-│   ├── ChatAssistant/       # ChatPanel — Gemini streaming chat
+│   ├── ChatAssistant/       # ChatPanel — AI streaming chat
 │   ├── PeriodicTable/       # PeriodicTablePalette — collapsible element browser
 │   ├── FormulaInput/        # Formula text input with live validation
 │   ├── ReactionsBar/        # Equation bar at bottom of canvas
@@ -117,7 +118,7 @@ src/
 ├── chemistry/               # Reaction database, bond rules, hazard data
 ├── data/                    # Element definitions (118 elements, shells, EN, mass)
 ├── hooks/                   # useChatAssistant, useLiveRef
-├── lookup/                  # PubChem & Gemini API lookup helpers
+├── lookup/                  # PubChem & Fireworks API lookup helpers
 ├── render/                  # Canvas draw functions (atoms, bonds, formulas)
 └── features/                # Feature-specific logic (Bohr, simple mode)
 ```
@@ -130,7 +131,7 @@ src/
 2. **Connect atoms** — click an atom, then click another to form a bond
 3. **React** — click **▶ Start** to trigger the reaction engine
 4. **Inspect** — click any atom to see its properties in the Inspector sidebar
-5. **Ask AI** — use the Gemini chat panel on the right to ask chemistry questions
+5. **Ask AI** — use the AI chat panel on the right to ask chemistry questions
 6. **Switch modes** — use **Bohr / Simple 2D / 3D** tabs in the top bar to change visualization
 7. **Change theme** — click ⚙ Settings → App Theme to pick Light, Dawn, Dark, or Grey
 
@@ -143,7 +144,7 @@ src/
 | UI Framework | React 18 + Vite |
 | Canvas Rendering | HTML5 Canvas 2D API |
 | 3D Molecules | 3Dmol.js |
-| AI Chat | Google Gemini API (streaming) |
+| AI Chat | Fireworks AI (streaming) |
 | Chemistry Data | PubChem REST API |
 | Backend / DB | Supabase (optional) |
 | Fonts | Space Grotesk + Space Mono (Google Fonts) |
