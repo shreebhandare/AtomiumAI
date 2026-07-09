@@ -153,4 +153,4 @@ src/
 
 ## 📜 License
 
-MIT © [Shree Bhandare](https://github.com/shreebhandare)
+MIT © [Shrikant Bhandare](https://github.com/shreebhandare)

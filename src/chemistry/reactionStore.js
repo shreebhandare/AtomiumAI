@@ -78,13 +78,17 @@ export const backgroundLookupQueue = new Set();
 // prevent duplicate in-flight requests for same fingerprint
 export const pendingLookups = new Set();
 
-// Loaded from environment variable. Exported as a live binding so importers
-// always see the current value; use setGeminiApiKey() to change it (e.g. from
-// the future Settings dialog) rather than assigning the import directly.
-export let GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || null;
+// Loaded from environment variable. Exported as live bindings so importers
+// always see the current values; use setters to update them.
+export let FIREWORKS_API_KEY = import.meta.env.VITE_FIREWORKS_API_KEY || null;
+export let FIREWORKS_MODEL = import.meta.env.VITE_FIREWORKS_MODEL || "accounts/fireworks/models/llama-v3p3-70b-instruct";
 
-export function setGeminiApiKey(key) {
-  GEMINI_API_KEY = key || null;
+export function setFireworksApiKey(key) {
+  FIREWORKS_API_KEY = key || null;
+}
+
+export function setFireworksModel(model) {
+  FIREWORKS_MODEL = model || "accounts/fireworks/models/llama-v3p3-70b-instruct";
 }
 
 // "Search Online" toggle (Upgrade #10.1): when false, PubChem's live network

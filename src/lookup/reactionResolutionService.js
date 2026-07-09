@@ -2,10 +2,10 @@
 // cache, then Supabase, then PubChem, then Gemini (in that order), caching whichever
 // source succeeds. This is the single entry point the component calls.
 import { supabase } from "../supabase";
-import { COMPOUND_BLUEPRINTS, pendingLookups, GEMINI_API_KEY, SEARCH_ONLINE_ENABLED, getInventorySearchGeneration } from "../chemistry/reactionStore";
+import { COMPOUND_BLUEPRINTS, pendingLookups, FIREWORKS_API_KEY, FIREWORKS_MODEL, SEARCH_ONLINE_ENABLED, getInventorySearchGeneration } from "../chemistry/reactionStore";
 import { fingerprint } from "../chemistry/fingerprint";
 import { tryPubChem } from "./pubchemClient";
-import { generateReactionWithGemini } from "./geminiClient";
+import { generateReactionWithFireworks } from "./fireworksClient";
 import { saveReactionToSupabase } from "./supabaseSync";
 import { generateCandidateFormulas, formulaFromCounts, fingerprintFromCounts } from "../chemistry/candidateFormulas";
 
@@ -27,19 +27,19 @@ export async function resolveUnknownReaction(fp, syms, onStatus) {
       }
     }
 
-    if (GEMINI_API_KEY) {
+    if (FIREWORKS_API_KEY) {
       try {
         onStatus?.("ai-generating");
-        const entry = await generateReactionWithGemini(fp, syms, GEMINI_API_KEY);
+        const entry = await generateReactionWithFireworks(fp, syms, FIREWORKS_API_KEY, FIREWORKS_MODEL);
         if (entry) {
           COMPOUND_BLUEPRINTS[fp] = entry;
           saveReactionToSupabase(fp, entry);
           onStatus?.(`found:${entry.name} (AI)`);
-          console.log(`[Gemini] Cached reaction for ${fp}:`, entry.name);
+          console.log(`[Fireworks] Cached reaction for ${fp}:`, entry.name);
           return;
         }
       } catch (err) {
-        console.warn(`[Gemini] Generation failed for ${fp}:`, err.message);
+        console.warn(`[Fireworks] Generation failed for ${fp}:`, err.message);
       }
     }
     onStatus?.("not-found");
@@ -82,17 +82,17 @@ export async function findCompoundEntry(fp, syms) {
     }
   }
 
-  // 4. Gemini
-  if (GEMINI_API_KEY) {
+  // 4. Fireworks AI
+  if (FIREWORKS_API_KEY) {
     try {
-      const entry = await generateReactionWithGemini(fp, syms, GEMINI_API_KEY);
+      const entry = await generateReactionWithFireworks(fp, syms, FIREWORKS_API_KEY, FIREWORKS_MODEL);
       if (entry) {
         COMPOUND_BLUEPRINTS[fp] = entry;
         saveReactionToSupabase(fp, entry);
         return entry;
       }
     } catch (err) {
-      console.warn(`[findCompoundEntry] Gemini generation failed:`, err.message);
+      console.warn(`[findCompoundEntry] Fireworks generation failed:`, err.message);
     }
   }
 
@@ -190,11 +190,11 @@ export async function runInventorySearch(atoms, generation, onCommit, onStatus) 
       }
     }
 
-    // 4. Gemini fallback (only for full inventory, not sub-sets)
+    // 4. Fireworks AI fallback (only for full inventory, not sub-sets)
     const isFullInventory = syms.length === atoms.length;
-    if (isFullInventory && GEMINI_API_KEY && !pendingLookups.has(fp)) {
+    if (isFullInventory && FIREWORKS_API_KEY && !pendingLookups.has(fp)) {
       try {
-        const entry = await generateReactionWithGemini(fp, syms, GEMINI_API_KEY);
+        const entry = await generateReactionWithFireworks(fp, syms, FIREWORKS_API_KEY, FIREWORKS_MODEL);
         if (getInventorySearchGeneration() !== generation) return;
         if (entry) {
           COMPOUND_BLUEPRINTS[fp] = entry;
@@ -205,7 +205,7 @@ export async function runInventorySearch(atoms, generation, onCommit, onStatus) 
         }
       } catch (err) {
         if (getInventorySearchGeneration() !== generation) return;
-        console.warn(`[Inventory] Gemini miss: ${formula}`, err.message);
+        console.warn(`[Inventory] Fireworks miss: ${formula}`, err.message);
       }
     }
   }

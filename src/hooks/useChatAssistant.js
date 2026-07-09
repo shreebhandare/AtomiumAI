@@ -1,17 +1,11 @@
 import { useState } from "react";
 import { getElement } from "../data/elements";
 import { fingerprint } from "../chemistry/fingerprint";
-import { COMPOUND_BLUEPRINTS, GEMINI_API_KEY, setGeminiApiKey } from "../chemistry/reactionStore";
-import { fetchWithRetry } from "../lookup/geminiClient";
+import { COMPOUND_BLUEPRINTS, FIREWORKS_API_KEY, setFireworksApiKey, FIREWORKS_MODEL, setFireworksModel } from "../chemistry/reactionStore";
+import { fetchWithRetry } from "../lookup/fireworksClient";
 import { getCanonicalEquation } from "../chemistry/equationBuilder";
 
-// Upgrade #11.1 (streaming): the model's response is a single structured JSON
-// object (see the system prompt below), not free prose, so we can't just dump
-// raw chunks into the chat bubble as they arrive. These two helpers do a
-// best-effort incremental read of an in-progress JSON buffer: one pulls out
-// "type" as soon as it's present, the other walks the (possibly still-open)
-// "text" string value char-by-char, honoring escapes, so the chat bubble can
-// grow live as tokens stream in instead of popping in all at once at the end.
+// Incremental JSON reader helpers to extract type and text from raw buffer
 function extractStreamingType(buffer) {
   const m = buffer.match(/"type"\s*:\s*"(\w+)"/);
   return m ? m[1] : null;
@@ -32,39 +26,44 @@ function extractStreamingText(buffer) {
     const ch = rest[i];
     if (ch === "\\") {
       const next = rest[i + 1];
-      if (next === undefined) break; // dangling escape at chunk boundary — wait for more data
+      if (next === undefined) break; // dangling escape at chunk boundary
       if (next === "n") out += "\n";
       else if (next === "t") out += "\t";
-      else out += next; // \" \\ \/ etc. — the escaped char itself is the right output
+      else out += next;
       i++;
       continue;
     }
-    if (ch === '"') break; // unescaped closing quote — string is complete
+    if (ch === '"') break; // closing quote
     out += ch;
   }
   return out;
 }
 
-// Gemini chat assistant: message thread + the async call that turns a natural-
+// AI chat assistant: message thread + the async call that turns a natural-
 // language request into a parsed reaction and spawns its atoms onto the canvas.
-// Takes the handful of canvas primitives it needs to do that spawn.
 export function useChatAssistant({ atomsRef, idCounter, clearAll, setCounts, setTempK, setPressureAtm }) {
   const [chatMessages, setChatMessages] = useState([
-    { role: "ai", text: "Hi! I'm Gemini. Ask me about elements, bonding, or reactions." },
+    { role: "ai", text: "Hi! I'm your AI Assistant. Ask me about elements, bonding, or reactions." },
   ]);
   const [chatInput, setChatInput] = useState("");
   const [chatExpanded, setChatExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Upgrade #11.3: animated waiting indicator while a Gemini request is in flight.
-  const [isWaitingForGemini, setIsWaitingForGemini] = useState(false);
-  // Reactive copy of the shared GEMINI_API_KEY live binding (Upgrade #11.2):
-  // seeded from the .env value, but updatable at runtime via the Settings dialog.
-  const [geminiApiKey, setGeminiApiKeyState] = useState(GEMINI_API_KEY || "");
+  const [isWaitingForAI, setIsWaitingForAI] = useState(false);
 
-  function updateGeminiApiKey(key) {
+  // Reactive copies of the shared FIREWORKS live bindings
+  const [fireworksApiKey, setFireworksApiKeyState] = useState(FIREWORKS_API_KEY || "");
+  const [fireworksModel, setFireworksModelState] = useState(FIREWORKS_MODEL || "accounts/fireworks/models/llama-v3p3-70b-instruct");
+
+  function updateFireworksApiKey(key) {
     const trimmed = (key || "").trim();
-    setGeminiApiKey(trimmed); // updates the shared module binding other lookups read
-    setGeminiApiKeyState(trimmed); // triggers a re-render of anything showing the key/badge
+    setFireworksApiKey(trimmed);
+    setFireworksApiKeyState(trimmed);
+  }
+
+  function updateFireworksModel(model) {
+    const trimmed = (model || "").trim();
+    setFireworksModel(trimmed);
+    setFireworksModelState(trimmed);
   }
 
   async function sendChatMessage() {
@@ -73,24 +72,13 @@ export function useChatAssistant({ atomsRef, idCounter, clearAll, setCounts, set
     setChatMessages((m) => [...m, { role: "user", text }]);
     setChatInput("");
 
-    if (!geminiApiKey) {
-      setChatMessages((m) => [...m, { role: "ai", text: "No Gemini API key is set. Click the ⚙️ settings icon above to add one." }]);
+    if (!fireworksApiKey) {
+      setChatMessages((m) => [...m, { role: "ai", text: "No AI API key is set. Click the ⚙️ settings icon above to add one." }]);
       return;
     }
-    setIsWaitingForGemini(true);
-    // Hoisted so the catch block can clean up a dangling streaming bubble if
-    // the connection drops mid-stream, rather than leaving an empty one stuck
-    // on screen alongside the error message.
+    setIsWaitingForAI(true);
     let liveMessageId = null;
     try {
-      // Upgrades #11.4 (real clarification on parse failure) + #11.5
-      // (chemistry-only Q&A support): a single call now asks Gemini to pick
-      // ONE of four response types itself, rather than always being forced
-      // into the reaction-JSON schema. This lets it answer general chemistry
-      // questions conversationally, ask a specific clarifying question when
-      // it can't pin down exact reactants (instead of us guessing from a
-      // JSON-parse failure), and decline non-chemistry questions — all still
-      // via one structured, easy-to-parse response.
       const systemInstructionText = `You are ChemLab AI's chemistry assistant, embedded in a reaction simulation canvas. For every user message, decide which ONE of these four response types applies, then respond with ONLY a single valid JSON object matching that type's schema — no markdown code fences, no introductory text, nothing but the raw JSON object.
 
 TYPE "reaction" — the user wants you to simulate, add, or show a specific chemical reaction or compound on the canvas, AND you are confident of the exact reactant elements.
@@ -122,46 +110,42 @@ TYPE "off_topic" — the message has nothing to do with chemistry.
 Always return exactly one JSON object of exactly one type — nothing else.`;
 
       const res = await fetchWithRetry(
-        // Upgrade #11.1: streamGenerateContent + alt=sse gives clean
-        // line-delimited "data: {...}" events over the same fetch Response,
-        // instead of one blocking generateContent call.
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${geminiApiKey}`,
+        "https://api.fireworks.ai/inference/v1/chat/completions",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${fireworksApiKey}`
+          },
           body: JSON.stringify({
-            contents: [{ parts: [{ text }] }],
-            systemInstruction: {
-              parts: [{ text: systemInstructionText }]
-            }
+            model: fireworksModel,
+            messages: [
+              { role: "system", content: systemInstructionText },
+              { role: "user", content: text }
+            ],
+            stream: true,
+            response_format: { type: "json_object" }
           }),
         }
       );
       if (!res.ok) {
         if (res.status === 429) {
-          throw new Error("Gemini API Rate Limit Exceeded (429). Please wait a moment before trying again.");
+          throw new Error("AI API Rate Limit Exceeded (429). Please wait a moment before trying again.");
         }
-        if (res.status === 403) {
-          throw new Error("Gemini API Key Invalid or Unauthorized (403). Please verify your key in Settings.");
+        if (res.status === 401 || res.status === 403) {
+          throw new Error("AI API Key Invalid or Unauthorized. Please verify your key in Settings.");
         }
-        throw new Error(`Gemini request failed: ${res.status}`);
+        throw new Error(`AI request failed: ${res.status}`);
       }
 
-      // rawBuffer accumulates the full candidate text across every streamed
-      // chunk — this is what gets parsed as JSON once the stream ends, same
-      // as `reply` did in the old single-shot version. liveMessageId/liveType
-      // track the chat bubble we're progressively filling in, if any.
       let rawBuffer = "";
       let liveType = null;
 
       const updateLiveBubble = () => {
         if (!liveType) {
           liveType = extractStreamingType(rawBuffer);
-          // Nothing meaningful to stream token-by-token for "reaction" (it's
-          // all structured fields, not prose) — keep the waiting indicator
-          // for that case and only spawn atoms once the stream completes.
           if (liveType && liveType !== "reaction" && !liveMessageId) {
-            liveMessageId = `gemini-stream-${Date.now()}`;
+            liveMessageId = `ai-stream-${Date.now()}`;
             setChatMessages((m) => [...m, { role: "ai", text: "", id: liveMessageId, streaming: true }]);
           }
         }
@@ -182,7 +166,7 @@ Always return exactly one JSON object of exactly one type — nothing else.`;
           if (done) break;
           sseBuffer += decoder.decode(value, { stream: true });
           const events = sseBuffer.split("\n\n");
-          sseBuffer = events.pop() || ""; // keep the last (possibly incomplete) event for next read
+          sseBuffer = events.pop() || "";
 
           for (const evt of events) {
             const line = evt.trim();
@@ -193,26 +177,21 @@ Always return exactly one JSON object of exactly one type — nothing else.`;
             try {
               chunkObj = JSON.parse(payload);
             } catch (_) {
-              continue; // ignore any malformed/partial SSE frame
+              continue;
             }
-            const deltaText = chunkObj?.candidates?.[0]?.content?.parts?.[0]?.text;
+            const deltaText = chunkObj?.choices?.[0]?.delta?.content;
             if (!deltaText) continue;
             rawBuffer += deltaText;
             updateLiveBubble();
           }
         }
       } else {
-        // Fallback for environments where a streaming body isn't available —
-        // behaves like the old single-shot call.
         const data = await res.json();
-        rawBuffer = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        rawBuffer = data?.choices?.[0]?.message?.content || "";
       }
 
       const reply = rawBuffer.trim();
 
-      // Replaces (or appends, if nothing was streamed live) the final chat
-      // bubble with the fully-resolved text, so streaming glitches/escaping
-      // quirks never leave a slightly-wrong partial string on screen.
       const finalizeAiMessage = (finalText) => {
         if (liveMessageId) {
           setChatMessages((m) => m.map((msg) => (msg.id === liveMessageId ? { ...msg, text: finalText, streaming: false } : msg)));
@@ -262,10 +241,6 @@ Always return exactly one JSON object of exactly one type — nothing else.`;
         if (parsed.minTempK) setTempK(parsed.minTempK);
         if (parsed.minPressureAtm) setPressureAtm(parsed.minPressureAtm);
 
-        // Cross-cutting: reaction equation single source of truth — the chat
-        // never free-texts its own equation formatting, it always goes
-        // through the same getCanonicalEquation() the Inspector/diagnostics/
-        // reaction-toasts use, so the notation can't drift between surfaces.
         const equation = getCanonicalEquation(parsed);
         finalizeAiMessage(
           equation
@@ -273,37 +248,27 @@ Always return exactly one JSON object of exactly one type — nothing else.`;
             : "I have added atoms to the canvas, you can start the simulation."
         );
       } else if ((parsed?.type === "answer" || parsed?.type === "clarify" || parsed?.type === "off_topic") && parsed.text) {
-        // Upgrade #11.5: real conversational answers for general chemistry
-        // questions, and Upgrade #11.4: a genuine, specific clarifying
-        // question (or a polite off-topic decline) instead of a canned line.
         finalizeAiMessage(parsed.text);
       } else if (parsed?.text) {
-        // Model returned a recognizable shape but an unexpected/missing type
-        // — still show its text rather than discarding a usable reply.
         finalizeAiMessage(parsed.text);
       } else if (reply) {
-        // Genuine parse failure (malformed JSON despite instructions) — show
-        // whatever Gemini actually wrote instead of a generic canned message;
-        // it's very likely still a real, on-topic answer or clarification.
         finalizeAiMessage(reply);
       } else {
         finalizeAiMessage("I couldn't quite understand that — could you mention the specific elements or compound you're asking about?");
       }
     } catch (err) {
       if (liveMessageId) {
-        // A partially-streamed bubble is on screen — replace it with the
-        // error rather than leaving an empty/half-finished one behind.
-        setChatMessages((m) => m.map((msg) => (msg.id === liveMessageId ? { ...msg, text: `Error contacting Gemini: ${err.message}`, streaming: false } : msg)));
+        setChatMessages((m) => m.map((msg) => (msg.id === liveMessageId ? { ...msg, text: `Error contacting AI: ${err.message}`, streaming: false } : msg)));
       } else {
-        setChatMessages((m) => [...m, { role: "ai", text: `Error contacting Gemini: ${err.message}` }]);
+        setChatMessages((m) => [...m, { role: "ai", text: `Error contacting AI: ${err.message}` }]);
       }
     } finally {
-      setIsWaitingForGemini(false);
+      setIsWaitingForAI(false);
     }
   }
 
   return {
-    chatMessages, chatInput, setChatInput, chatExpanded, setChatExpanded, sendChatMessage, geminiApiKey,
-    settingsOpen, setSettingsOpen, updateGeminiApiKey, isWaitingForGemini,
+    chatMessages, chatInput, setChatInput, chatExpanded, setChatExpanded, sendChatMessage, fireworksApiKey,
+    settingsOpen, setSettingsOpen, updateFireworksApiKey, fireworksModel, updateFireworksModel, isWaitingForAI,
   };
 }

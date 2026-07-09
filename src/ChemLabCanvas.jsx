@@ -1626,7 +1626,8 @@ export default function ChemLabCanvas() {
 
   const {
     chatMessages, chatInput, setChatInput, chatExpanded, setChatExpanded, sendChatMessage, useAI, setUseAI,
-    settingsOpen, setSettingsOpen, isWaitingForGemini, handleSpawnReaction,
+    settingsOpen, setSettingsOpen, isWaitingForAI, handleSpawnReaction,
+    fireworksApiKey, updateFireworksApiKey, fireworksModel, updateFireworksModel
   } = useChatAssistant({
     atomsRef, idCounter, clearAll, setCounts, setTempK, setPressureAtm,
     selectedAtom: selected,
@@ -1767,6 +1768,10 @@ export default function ChemLabCanvas() {
         useAI={useAI} toggleUseAI={() => setUseAI(v => !v)}
         visualMode={visualMode} setVisualMode={setVisualMode}
         theme={theme} setTheme={handleSetTheme}
+        fireworksApiKey={fireworksApiKey}
+        updateFireworksApiKey={updateFireworksApiKey}
+        fireworksModel={fireworksModel}
+        updateFireworksModel={updateFireworksModel}
       />
 
       {/* MAIN */}
@@ -1826,7 +1831,7 @@ export default function ChemLabCanvas() {
           chatExpanded={chatExpanded} setChatExpanded={setChatExpanded}
           chatMessages={chatMessages} chatInput={chatInput} setChatInput={setChatInput}
           sendChatMessage={sendChatMessage} useAI={useAI}
-          isWaitingForGemini={isWaitingForGemini}
+          isWaitingForAI={isWaitingForAI}
           handleSpawnReaction={handleSpawnReaction}
         />
       </div>

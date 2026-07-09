@@ -6,13 +6,11 @@ const WAITING_MESSAGES = ["Searching...", "Researching...", "Finding your answer
 // Presentational — all state (messages, input, expanded) lives in ChemLabCanvas.
 export default function ChatPanel({
   chatExpanded, setChatExpanded, chatMessages, chatInput, setChatInput,
-  sendChatMessage, useAI, isWaitingForGemini, handleSpawnReaction,
+  sendChatMessage, useAI, isWaitingForAI, handleSpawnReaction,
 }) {
-  // Upgrade #11.3: cycle through waiting messages every 1.4s while a request
-  // is in flight, so the panel doesn't sit silently during the Gemini call.
   const [waitingMsgIndex, setWaitingMsgIndex] = useState(0);
   useEffect(() => {
-    if (!isWaitingForGemini) {
+    if (!isWaitingForAI) {
       setWaitingMsgIndex(0);
       return;
     }
@@ -20,7 +18,7 @@ export default function ChatPanel({
       setWaitingMsgIndex((i) => (i + 1) % WAITING_MESSAGES.length);
     }, 1400);
     return () => clearInterval(interval);
-  }, [isWaitingForGemini]);
+  }, [isWaitingForAI]);
 
   // Upgrade #11.1: once a message is actively streaming in, its own growing
   // text is the "something is happening" signal — showing the generic
@@ -36,7 +34,7 @@ export default function ChatPanel({
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--clb-border)", background: "var(--clb-bg-canvas)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 16, height: 16, borderRadius: "50%", background: "conic-gradient(#4285f4,#9b72cb,#d96570,#4285f4)" }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--clb-text-primary)" }}>Gemini Assistant</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--clb-text-primary)" }}>AI Assistant</span>
               {!useAI && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} title="AI disabled" />}
             </div>
             <div style={{ display: "flex", gap: 4 }}>
@@ -92,7 +90,7 @@ export default function ChatPanel({
                 )}
               </div>
             ))}
-            {isWaitingForGemini && !hasActiveStream && (
+            {isWaitingForAI && !hasActiveStream && (
               <div style={{
                 alignSelf: "flex-start", maxWidth: "88%",
                 background: "var(--clb-bg-panel)", border: "1px solid var(--clb-border)", borderRadius: 10,
@@ -113,16 +111,16 @@ export default function ChatPanel({
             <input
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !isWaitingForGemini && sendChatMessage()}
-              placeholder="Ask Gemini..."
-              disabled={isWaitingForGemini}
-              style={{ flex: 1, background: "var(--clb-bg-card)", border: "1px solid var(--clb-border)", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "var(--clb-text-primary)", outline: "none", opacity: isWaitingForGemini ? 0.6 : 1 }}
+              onKeyDown={(e) => e.key === "Enter" && !isWaitingForAI && sendChatMessage()}
+              placeholder="Ask AI..."
+              disabled={isWaitingForAI}
+              style={{ flex: 1, background: "var(--clb-bg-card)", border: "1px solid var(--clb-border)", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "var(--clb-text-primary)", outline: "none", opacity: isWaitingForAI ? 0.6 : 1 }}
             />
             <button
               className="clb-btn"
-              style={{ padding: "8px 14px", background: "#2563eb", borderColor: "#2563eb", color: "#ffffff", opacity: isWaitingForGemini ? 0.6 : 1 }}
+              style={{ padding: "8px 14px", background: "#2563eb", borderColor: "#2563eb", color: "#ffffff", opacity: isWaitingForAI ? 0.6 : 1 }}
               onClick={sendChatMessage}
-              disabled={isWaitingForGemini}
+              disabled={isWaitingForAI}
             >
               ➤
             </button>
