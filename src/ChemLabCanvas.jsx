@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "./supabase";
 import {
   selectBestLayout, denormalizePositions, normalizePositions,
-  clearLayoutCache,
+  clearLayoutCache, buildCircularLayout,
 } from "./layoutEngine";
 import { parseFormula, expandFormulaToAtoms } from "./formulaParser";
 import Molecule3DViewer from "./Molecule3DViewer";
@@ -36,7 +36,9 @@ import {
 import { build3DXYZFallback } from "./chemistry/xyzFallback";
 import { drawFormula } from "./render/drawFormula";
 import { runInventorySearch, findCompoundEntry } from "./lookup/reactionResolutionService";
-import { getCanonicalEquation, getExperimentEquation, formatFormulaUnicode } from "./chemistry/equationBuilder";
+import { getCanonicalEquation, getExperimentEquation, formatFormulaUnicode, buildMoleculeEquation, getProductsLabel } from "./chemistry/equationBuilder";
+import { runReactionEngine, REACTION_ENGINE_STATUS } from "./chemistry/reactionEngine";
+import { expandProducts } from "./chemistry/moleculeReactionResolver";
 
 // ───────────────────────── MAIN COMPONENT ─────────────────────────
 export default function ChemLabCanvas() {
@@ -157,13 +159,17 @@ export default function ChemLabCanvas() {
   const [reactionToasts, setReactionToasts] = useState([]);
   const REACTION_TOAST_TTL_MS = 5000;
   const pushReactionToast = (entry) => {
-    const equation = getCanonicalEquation(entry);
-    // Nothing worth showing yet (mid-search entries can lack reactants/formula).
-    if (!equation && !entry?.formula) return;
-    const id = `${entry.formula || entry.name || "rxn"}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    let equation;
+    if (Array.isArray(entry?.products)) {
+      equation = buildMoleculeEquation(entry.reactants, expandProducts(entry));
+    } else {
+      equation = getCanonicalEquation(entry);
+    }
+    if (!equation) return;
+    const id = `rxn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setReactionToasts((prev) => [...prev, {
       id,
-      equation: equation || `→ ${entry.formula}`,
+      equation,
       name: entry.name || "",
     }]);
     setTimeout(() => {
@@ -252,6 +258,11 @@ export default function ChemLabCanvas() {
   }, [counts.atoms]);
 
   const displayedEquation = useMemo(() => {
+    // Molecule-level reaction result (multi-product)
+    if (reactionEquation && typeof reactionEquation === "object" && reactionEquation.type === "molecule_reaction") {
+      return { type: "success", text: reactionEquation.equationStr };
+    }
+
     // 1. Successful reaction equation
     if (reactionEquation && typeof reactionEquation === "object" && reactionEquation.type === "reaction") {
       const entry = reactionEquation.entry;
@@ -1310,6 +1321,268 @@ export default function ChemLabCanvas() {
   };
 
   /**
+   * Handles spawning the products of a molecule-level reaction.
+   * Resolves all product blueprints in parallel, ensuring a transactional
+   * all-or-nothing execution before removing reactants.
+   *
+   * @param {object} result - The reaction engine result object
+   */
+  const handleMoleculeReaction = async (result) => {
+    const reactantAtomIds = new Set();
+    const reactantBondIds = new Set();
+    
+    result.molecules.forEach(m => {
+      if (result.reactantFormulas.includes(m.formula)) {
+        m.atomIds.forEach(id => reactantAtomIds.add(id));
+        m.bondIds.forEach(id => reactantBondIds.add(id));
+      }
+    });
+
+    const reactingAtoms = atomsRef.current.filter(a => reactantAtomIds.has(a.id));
+    if (reactingAtoms.length === 0) return;
+
+    const reactionCentroid = {
+      x: reactingAtoms.reduce((s, a) => s + a.x, 0) / reactingAtoms.length,
+      y: reactingAtoms.reduce((s, a) => s + a.y, 0) / reactingAtoms.length,
+    };
+
+    setPubchemStatus("searching");
+    setReactionEquation("Resolving products...");
+
+    try {
+      // 1. Resolve ALL product blueprints in parallel (Promise.all)
+      const blueprints = await Promise.all(
+        result.productFormulas.map(async (formula) => {
+          const subAtoms = expandFormulaToAtoms(formula);
+          if (subAtoms.length <= 1) {
+            return { formula, reactants: subAtoms, bonds: [] };
+          }
+          const fp = fingerprint(subAtoms);
+          return findCompoundEntry(fp, subAtoms);
+        })
+      );
+
+      // 2. All-or-Nothing check: Did every product blueprint resolve?
+      const allResolved = blueprints.every(bp => bp !== null);
+      if (!allResolved) {
+        console.warn("[Molecule Reaction] One or more product blueprints failed to resolve. Aborting reaction.");
+        setPubchemStatus("not-found");
+        setReactionEquation("No reaction possible (could not verify product structures).");
+        return;
+      }
+
+      // 3. Execution: delete reactants since everything resolved
+      atomsRef.current = atomsRef.current.filter(a => !reactantAtomIds.has(a.id));
+      bondsRef.current = bondsRef.current.filter(b => !reactantBondIds.has(b.id));
+
+      let totalSpawnedAtoms = 0;
+      const n = result.productFormulas.length;
+
+      // 4. Spawn products in sequence, computing distinct centers
+      for (let i = 0; i < n; i++) {
+        const formula = result.productFormulas[i];
+        const blueprint = blueprints[i];
+        const subAtoms = expandFormulaToAtoms(formula);
+        const radius = subAtoms.length === 1 ? 0 : Math.max(80, subAtoms.length * 28);
+
+        let desiredCenter;
+        if (n === 1) {
+          desiredCenter = reactionCentroid;
+        } else if (n === 2) {
+          desiredCenter = {
+            x: reactionCentroid.x + (i === 0 ? -130 : 130),
+            y: reactionCentroid.y,
+          };
+        } else {
+          const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+          const dist = Math.max(120, n * 80);
+          desiredCenter = {
+            x: reactionCentroid.x + dist * Math.cos(angle),
+            y: reactionCentroid.y + dist * Math.sin(angle),
+          };
+        }
+
+        const center = findFreePlacement(desiredCenter.x, desiredCenter.y, radius);
+
+        let targetPositions = null;
+        if (blueprint && blueprint.reactants && blueprint.reactants.length > 1) {
+          const coordInfo = detectCoordinationCompound(blueprint);
+          if (coordInfo) {
+            const rawPositions = buildCoordinationLayout(blueprint, coordInfo, center);
+            targetPositions = blueprint.reactants.map((_, idx) => rawPositions[idx]);
+          } else {
+            targetPositions = await selectBestLayout(blueprint, center);
+          }
+        }
+
+        const blueprintWithTarget = blueprint ? { ...blueprint, targetPositions } : null;
+        const count = spawnMoleculeAtPosition(formula, blueprintWithTarget, center);
+        totalSpawnedAtoms += count;
+      }
+
+      setPubchemStatus(null);
+      setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+
+      // Update UI states
+      const equationStr = buildMoleculeEquation(result.reactantFormulas, result.productFormulas);
+      setReactionEquation({ type: "molecule_reaction", equationStr });
+
+      const productsLabel = getProductsLabel(result.entry);
+      setLastReaction({
+        ...result.entry,
+        formula: productsLabel,
+        atomCount: totalSpawnedAtoms,
+      });
+
+      const productLabels = result.entry.products.map((p) =>
+        (p.coefficient > 1 ? String(p.coefficient) : "") + p.formula
+      );
+
+      setExperimentHistory((prev) => [
+        ...prev,
+        {
+          id: `exp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          number: prev.length + 1,
+          reactants: result.reactantFormulas,
+          products: productLabels,
+          fact: result.entry.fact || "No explanation provided.",
+          name: result.entry.name,
+        },
+      ]);
+
+      pushReactionToast(result.entry);
+      spawnParticles(reactionCentroid.x, reactionCentroid.y, 0x06b6d4, 20);
+      setMode("running");
+
+    } catch (err) {
+      console.error("[Molecule Reaction] Error spawning products:", err.message);
+      setPubchemStatus("not-found");
+      setReactionEquation("Error occurred while executing reaction.");
+    }
+  };
+
+  /**
+   * Spawns a single molecule (or single atom) pre-bonded and positioned correctly
+   * centered at target position.
+   * Updates atomsRef.current, bondsRef.current, and bondRestLengths.current directly.
+   * Does not call setCounts (caller should call it after spawning batches).
+   *
+   * @param {string} formula - The formula of the molecule to spawn (e.g. "NaCl", "H2O")
+   * @param {object|null} blueprint - The resolved compound entry from findCompoundEntry,
+   *                                  or null if none was resolved (fallback to circular loose atoms)
+   * @param {{x: number, y: number}} center - The desired centroid target coordinate
+   * @returns {number} - The number of atoms successfully spawned
+   */
+  const spawnMoleculeAtPosition = (formula, blueprint, center) => {
+    const subAtoms = expandFormulaToAtoms(formula);
+    if (subAtoms.length === 0) return 0;
+
+    // 1. Single-atom case (e.g. "H" or element-only formula)
+    if (subAtoms.length === 1) {
+      const sym = subAtoms[0];
+      const el = getElement(sym.charAt(0).toUpperCase() + sym.slice(1).toLowerCase())
+               || getElement(sym.toUpperCase())
+               || getElement(sym);
+      if (!el) return 0;
+      const id = idCounter.current++;
+      atomsRef.current.push({
+        id, sym: el.sym, x: center.x, y: center.y, vx: 0, vy: 0,
+        shellAngle: Math.random() * 10, shells: el.shells,
+        instability: 1, vibPhase: Math.random() * 10,
+      });
+      spawnParticles(center.x, center.y, el.color, 8);
+      return 1;
+    }
+
+    // 2. Verified blueprint case (structures and bonds pre-resolved)
+    if (blueprint && Array.isArray(blueprint.bonds)) {
+      const countPerMolecule = blueprint.reactants.length;
+      let targetPositions;
+      const coordInfo = detectCoordinationCompound(blueprint);
+      if (coordInfo) {
+        const rawPositions = buildCoordinationLayout(blueprint, coordInfo, center);
+        targetPositions = blueprint.reactants.map((_, i) => rawPositions[i]);
+      } else {
+        targetPositions = blueprint.targetPositions || buildCircularLayout(blueprint, center);
+      }
+
+      const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const formattedFormula = formatFormulaUnicode(blueprint.formula);
+
+      const spawnedAtoms = [];
+      blueprint.reactants.forEach((sym, idx) => {
+        const el = getElement(sym);
+        const pos = targetPositions[idx] || center;
+        const id = idCounter.current++;
+        const newAtom = {
+          id, sym: el?.sym || sym, x: pos.x, y: pos.y, vx: 0, vy: 0,
+          shellAngle: Math.random() * 10,
+          shells: el?.shells || [1],
+          instability: 1,
+          vibPhase: Math.random() * 10,
+          spawnGroupId: groupId,
+          spawnGroupFormula: formattedFormula,
+          spawnGroupSize: countPerMolecule,
+        };
+        atomsRef.current.push(newAtom);
+        spawnedAtoms.push(newAtom);
+        spawnParticles(pos.x, pos.y, el?.color || 0xcccccc, 8);
+      });
+
+      blueprint.bonds.forEach((bd) => {
+        const atomA = spawnedAtoms[bd.from];
+        const atomB = spawnedAtoms[bd.to];
+        if (atomA && atomB) {
+          const elA = getElement(atomA.sym);
+          const elB = getElement(atomB.sym);
+          const bondId = `${atomA.id}-${atomB.id}`;
+          bondsRef.current.push({
+            id: bondId,
+            a: atomA.id, b: atomB.id,
+            order: Number(bd.order) || 1, type: bd.type || 'covalent',
+            enA: elA?.en ?? 1.0, enB: elB?.en ?? 1.0,
+          });
+          const dist = Math.hypot(atomB.x - atomA.x, atomB.y - atomA.y);
+          bondRestLengths.current.set(bondId, dist);
+        }
+      });
+
+      return countPerMolecule;
+    } else {
+      // 3. Unverified compound fallback — spawn circular loose atoms
+      const count = subAtoms.length;
+      const radius = Math.max(80, count * 28);
+      const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const formattedFormula = formatFormulaUnicode(formula);
+
+      subAtoms.forEach((sym, spawnedIdx) => {
+        const el = getElement(sym.charAt(0).toUpperCase() + sym.slice(1).toLowerCase())
+                 || getElement(sym.toUpperCase())
+                 || getElement(sym);
+        if (!el) return;
+
+        const angle = (spawnedIdx / count) * Math.PI * 2 - Math.PI / 2;
+        const x = center.x + radius * Math.cos(angle);
+        const y = center.y + radius * Math.sin(angle);
+        const id = idCounter.current++;
+        atomsRef.current.push({
+          id, sym: el.sym, x, y, vx: 0, vy: 0,
+          shellAngle: Math.random() * 10,
+          shells: el.shells,
+          instability: 1,
+          vibPhase: Math.random() * 10,
+          spawnGroupId: groupId,
+          spawnGroupFormula: formattedFormula,
+          spawnGroupSize: count,
+        });
+        spawnParticles(x, y, el.color, 8);
+      });
+
+      return count;
+    }
+  };
+
+  /**
    * Expand the current formulaInput into individual atoms and place them
    * on the canvas in a circular arrangement centred at the origin.
    * Clears any existing atoms first so the canvas always shows exactly
@@ -1319,7 +1592,6 @@ export default function ChemLabCanvas() {
     const formula = formulaInput.trim();
     if (!formula) return;
 
-    // Split coefficient and sub-formula (e.g. 2H -> coef=2, subFormula="H")
     let s = formula.replace(/\s+/g, "");
     let coefMatch = s.match(/^([0-9]+)(.*)/);
     let coef = 1;
@@ -1344,153 +1616,68 @@ export default function ChemLabCanvas() {
     setFormulaInput("");
     formulaInputRef.current = "";
 
-    // Helper: spawn individual atoms as fallback
-    const spawnFallbackAtoms = () => {
-      // Calculate layout center
-      const count = subAtoms.length * coef;
-      const radius = count === 1 ? 0 : Math.max(80, count * 28);
-      const existing = atomsRef.current;
-      const desired = existing.length > 0
-        ? { x: Math.max(...existing.map((a) => a.x)) + radius + 70, y: 0 }
-        : { x: 0, y: 0 };
-      const { x: centerX, y: centerY } = findFreePlacement(desired.x, desired.y, radius);
-
-      // Group metadata for fallback
-      const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const formattedFormula = formatFormulaUnicode(formula);
-      const totalAtomsInGroup = count;
-
-      let spawnedIdx = 0;
-      for (let c = 0; c < coef; c++) {
-        subAtoms.forEach((sym) => {
-          const el = getElement(sym.charAt(0).toUpperCase() + sym.slice(1).toLowerCase())
-                   || getElement(sym.toUpperCase())
-                   || getElement(sym);
-          if (!el) return;
-
-          const angle = (spawnedIdx / count) * Math.PI * 2 - Math.PI / 2;
-          const x = centerX + (count === 1 ? 0 : radius * Math.cos(angle));
-          const y = centerY + (count === 1 ? 0 : radius * Math.sin(angle));
-          const id = idCounter.current++;
-          atomsRef.current.push({
-            id, sym: el.sym, x, y, vx: 0, vy: 0,
-            shellAngle: Math.random() * 10,
-            shells: el.shells,
-            instability: 1,
-            vibPhase: Math.random() * 10,
-            spawnGroupId: count > 1 ? groupId : undefined,
-            spawnGroupFormula: count > 1 ? formattedFormula : undefined,
-            spawnGroupSize: count > 1 ? totalAtomsInGroup : undefined,
-          });
-          spawnParticles(x, y, el.color, 8);
-          spawnedIdx++;
-        });
-      }
-
-      setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
-    };
-
-    // If subAtoms has length <= 1, it's just individual atoms (e.g. "H" or "2H"), no verification needed
+    // If H or NaCl-type elements of count <= 1, spawn immediately
     if (subAtoms.length <= 1) {
-      spawnFallbackAtoms();
+      const spacingRadius = 0;
+      const center = findFreePlacement(0, 0, spacingRadius);
+      spawnMoleculeAtPosition(subFormula, null, center);
+      setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
       return;
     }
 
-    // It's a compound! We must verify it
     setPubchemStatus("searching");
     setReactionEquation("Verifying molecule structure...");
 
     try {
       const fp = fingerprint(subAtoms);
-      const entry = await findCompoundEntry(fp, subAtoms);
+      const blueprint = await findCompoundEntry(fp, subAtoms);
 
-      if (entry && Array.isArray(entry.bonds)) {
-        // Molecule is verified! Let's spawn coef pre-bonded structures
-        setPubchemStatus(null);
-        setReactionEquation("Awaiting reactants... Build your experiment and click Start.");
+      if (!blueprint) {
+        throw new Error(`Could not verify structure for "${subFormula}"`);
+      }
 
-        // Calculate layout details for each unit
-        const countPerMolecule = entry.reactants.length;
-        const spacingRadius = countPerMolecule === 1 ? 0 : Math.max(80, countPerMolecule * 28);
+      setPubchemStatus(null);
+      setReactionEquation("Awaiting reactants... Build your experiment and click Start.");
 
-        for (let c = 0; c < coef; c++) {
-          // Find center point for this molecule unit
-          const existing = atomsRef.current;
-          const desired = existing.length > 0
-            ? { x: Math.max(...existing.map((a) => a.x)) + spacingRadius + 100, y: 0 }
-            : { x: 0, y: 0 };
-          const { x: centerX, y: centerY } = findFreePlacement(desired.x, desired.y, spacingRadius);
+      const spacingRadius = subAtoms.length === 1 ? 0 : Math.max(80, subAtoms.length * 28);
 
-          // Get spatial positions for this molecule centered at (centerX, centerY)
-          let targetPositions;
-          const coordInfo = detectCoordinationCompound(entry);
-          if (coordInfo) {
-            const rawPositions = buildCoordinationLayout(entry, coordInfo, { x: centerX, y: centerY });
-            targetPositions = entry.reactants.map((_, i) => rawPositions[i]);
-          } else {
-            targetPositions = await selectBestLayout(entry, { x: centerX, y: centerY });
-          }
+      for (let c = 0; c < coef; c++) {
+        const existing = atomsRef.current;
+        const desired = existing.length > 0
+          ? { x: Math.max(...existing.map((a) => a.x)) + spacingRadius + 100, y: 0 }
+          : { x: 0, y: 0 };
+        const center = findFreePlacement(desired.x, desired.y, spacingRadius);
 
-          // Create unique groupId for this specific molecule instance
-          const groupId = `group_${Date.now()}_${c}_${Math.random().toString(36).substr(2, 9)}`;
-          const formattedFormula = formatFormulaUnicode(entry.formula);
-
-          // Spawn atoms in the molecule reactant order (so it maps correctly to positions and bonds)
-          const spawnedAtoms = [];
-          entry.reactants.forEach((sym, idx) => {
-            const el = getElement(sym);
-            const pos = targetPositions[idx] || { x: centerX, y: centerY };
-            const id = idCounter.current++;
-            const newAtom = {
-              id, sym: el?.sym || sym, x: pos.x, y: pos.y, vx: 0, vy: 0,
-              shellAngle: Math.random() * 10,
-              shells: el?.shells || [1],
-              instability: 1,
-              vibPhase: Math.random() * 10,
-              spawnGroupId: groupId,
-              spawnGroupFormula: formattedFormula,
-              spawnGroupSize: countPerMolecule,
-            };
-            atomsRef.current.push(newAtom);
-            spawnedAtoms.push(newAtom);
-            spawnParticles(pos.x, pos.y, el?.color || 0xcccccc, 8);
-          });
-
-          // Write bonds for this molecule unit
-          entry.bonds.forEach((bd) => {
-            const atomA = spawnedAtoms[bd.from];
-            const atomB = spawnedAtoms[bd.to];
-            if (atomA && atomB) {
-              const elA = getElement(atomA.sym);
-              const elB = getElement(atomB.sym);
-              const bondId = `${atomA.id}-${atomB.id}`;
-              bondsRef.current.push({
-                id: bondId,
-                a: atomA.id, b: atomB.id,
-                order: Number(bd.order) || 1, type: bd.type || 'covalent',
-                enA: elA?.en ?? 1.0, enB: elB?.en ?? 1.0,
-              });
-
-              // Set spring rest length
-              const dist = Math.hypot(atomB.x - atomA.x, atomB.y - atomA.y);
-              bondRestLengths.current.set(bondId, dist);
-            }
-          });
+        // Pre-optimize layout center for this c-th iteration so helper runs sync
+        let targetPositions;
+        const coordInfo = detectCoordinationCompound(blueprint);
+        if (coordInfo) {
+          const rawPositions = buildCoordinationLayout(blueprint, coordInfo, center);
+          targetPositions = blueprint.reactants.map((_, idx) => rawPositions[idx]);
+        } else {
+          targetPositions = await selectBestLayout(blueprint, center);
         }
 
-        setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
-      } else {
-        // Molecule not found or has no bonds - fallback
-        console.warn(`[Verified Spawn] Could not verify ${subFormula} as a stable molecule. Falling back to free atoms.`);
-        setPubchemStatus("not-found");
-        setReactionEquation(`Could not verify "${subFormula}" as a stable molecule. Spawning separate atoms.`);
-        spawnFallbackAtoms();
+        const blueprintWithTarget = { ...blueprint, targetPositions };
+        spawnMoleculeAtPosition(subFormula, blueprintWithTarget, center);
       }
+
+      setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
     } catch (err) {
-      console.error(`[Verified Spawn] Error verifying ${subFormula}:`, err.message);
+      console.warn(`[Verified Spawn] Blueprint lookup failed for ${formula}, falling back to loose atoms:`, err.message);
       setPubchemStatus("not-found");
-      setReactionEquation(`Error verifying "${subFormula}": ${err.message}. Spawning separate atoms.`);
-      spawnFallbackAtoms();
+      setReactionEquation(`Could not verify "${subFormula}" as a stable molecule. Spawning separate atoms.`);
+      
+      const spacingRadius = Math.max(80, subAtoms.length * 28);
+      for (let c = 0; c < coef; c++) {
+        const existing = atomsRef.current;
+        const desired = existing.length > 0
+          ? { x: Math.max(...existing.map((a) => a.x)) + spacingRadius + 100, y: 0 }
+          : { x: 0, y: 0 };
+        const center = findFreePlacement(desired.x, desired.y, spacingRadius);
+        spawnMoleculeAtPosition(subFormula, null, center);
+      }
+      setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
     }
   };
 
@@ -1522,6 +1709,13 @@ export default function ChemLabCanvas() {
     const atoms = atomsRef.current;
     if (atoms.length < 2) {
       setReactionEquation("Please add at least 2 atoms to start an experiment.");
+      return;
+    }
+
+    // ── Molecule-level reaction check (REACTIONS database) ──
+    const moleculeEngineResult = runReactionEngine(atoms, bondsRef.current);
+    if (moleculeEngineResult.status === REACTION_ENGINE_STATUS.REACTION) {
+      handleMoleculeReaction(moleculeEngineResult);
       return;
     }
 

@@ -248,7 +248,7 @@ export function groupFormulas(formulas) {
   return order.map((formula) => ({ formula, coefficient: counts[formula] }));
 }
 
-function renderFormulaSide(formulas) {
+export function renderFormulaSide(formulas) {
   return groupFormulas(formulas)
     .map(({ formula, coefficient }) => {
       const coeffStr = coefficient > 1 ? String(coefficient) : "";
@@ -276,5 +276,19 @@ export function buildMoleculeEquation(reactantFormulas, productFormulas) {
 export function getMoleculeEquation(entry) {
   if (!entry || !Array.isArray(entry.reactants)) return "";
   return buildMoleculeEquation(entry.reactants, expandProducts(entry));
+}
+
+/**
+ * Returns the formatted product display string for a molecule-based REACTIONS
+ * entry, e.g. products: [{formula:"BaSO4",coeff:1},{formula:"NaCl",coeff:2}]
+ * → "BaSO₄ + 2NaCl"
+ * Falls back to entry.formula if products[] is absent (atom-assembly entries).
+ */
+export function getProductsLabel(entry) {
+  if (!entry) return "";
+  if (Array.isArray(entry.products) && entry.products.length > 0) {
+    return renderFormulaSide(expandProducts(entry));
+  }
+  return formatFormulaUnicode(entry.formula || "");
 }
 
