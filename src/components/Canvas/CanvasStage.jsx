@@ -58,7 +58,7 @@ export default function CanvasStage({
                   {pubchemStatus === "searching" ? (
                     <>
                       <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#7c3aed", boxShadow: "0 0 5px #7c3aed", animation: "pulse 1s infinite" }} />
-                      <span style={{ color: "#6d28d9", fontWeight: 500 }}>PubChem — searching for reaction data...</span>
+                      <span style={{ color: "#6d28d9", fontWeight: 500 }}>Searching for reaction data...</span>
                     </>
                   ) : pubchemStatus === "ai-generating" ? (
                     <>
@@ -73,7 +73,7 @@ export default function CanvasStage({
                   ) : pubchemStatus.startsWith("found:") ? (
                     <>
                       <span style={{ color: "#16a34a", fontWeight: "bold" }}>✓</span>
-                      <span style={{ color: "#15803d", fontWeight: 600 }}>PubChem — found: {pubchemStatus.replace("found:", "")}</span>
+                      <span style={{ color: "#15803d", fontWeight: 600 }}>Found: {pubchemStatus.replace("found:", "")}</span>
                     </>
                   ) : null}
                 </div>

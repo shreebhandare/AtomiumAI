@@ -292,7 +292,7 @@ export default function HeaderBar({
                 <div style={{ flex: 1, paddingRight: 16 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>🌐 Search Online</div>
                   <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>
-                    Query PubChem for active compound and reaction lookups. When off, uses cache only.
+                    Query online databases for active compound and reaction lookups. When off, uses cache only.
                   </div>
                 </div>
                 <button
