@@ -1,0 +1,16 @@
+services:
+  chemlab-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+        - VITE_FIREWORKS_API_KEY=${VITE_FIREWORKS_API_KEY}
+        - VITE_FIREWORKS_MODEL=${VITE_FIREWORKS_MODEL}
+    ports:
+      - "8080:80"
+    env_file:
+      - .env
+    restart: unless-stopped
+    container_name: chemlab-ai-ui
