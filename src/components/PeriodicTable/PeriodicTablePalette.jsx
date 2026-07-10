@@ -10,7 +10,7 @@ import { ELEMENTS, getGroupStyles } from "../../data/elements";
 // HTML5 drag-and-drop has no keyboard-triggerable path.
 //
 // Presentational — hover-tooltip state and the actual canvas-spawn action
-// live in ChemLabCanvas; this component just reports the selection up.
+// live in AtomiumCanvas; this component just reports the selection up.
 export default function PeriodicTablePalette({ setHoveredElement, onSelectElement }) {
   const [search, setSearch] = useState("");
   const [isCollapsed, setIsCollapsed] = useState(true);

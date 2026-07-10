@@ -1,6 +1,6 @@
 // ───────────────────────── SHARED REACTION STATE ─────────────────────────
 // This module centralizes the mutable, module-level state that used to live
-// directly inside ChemLabCanvas.jsx.
+// directly inside AtomiumCanvas.jsx.
 //
 // There are two distinct concepts living in this file, and they must never be
 // confused with one another:
@@ -10,7 +10,7 @@
 //     describes a single molecule's internal atom-to-atom bond graph
 //     (which atom index bonds to which, with what order/type). This powers
 //     the atom-assembly sandbox: dragging loose H/H/O atoms together and
-//     having the engine recognize + bond them into water. PubChem/Gemini/
+//     having the engine recognize + bond them into water. PubChem/AtomiumAI/
 //     Supabase populate this table. It NEVER describes a reaction between
 //     two already-formed molecules.
 //
@@ -88,7 +88,7 @@ export function registerReaction(entry) {
  * Finds a known atom-bond blueprint for a given product molecule formula
  * (e.g. "NaCl"), if one has already been resolved/cached. Used when the
  * reaction engine needs to spawn a product molecule's atoms+bonds on the
- * canvas — falls back to an async PubChem/Gemini lookup (see
+ * canvas — falls back to an async PubChem/AtomiumAI lookup (see
  * findCompoundEntry in reactionResolutionService.js) when nothing is cached.
  */
 export function findBlueprintByFormula(formula) {
@@ -110,13 +110,13 @@ export const FIREWORKS_API_KEY = import.meta.env.VITE_FIREWORKS_API_KEY || null;
 export const FIREWORKS_MODEL = import.meta.env.VITE_FIREWORKS_MODEL || null;
 
 if (!FIREWORKS_MODEL) {
-  console.error("[ChemLab] VITE_FIREWORKS_MODEL is not configured. Set it in your .env file (e.g. VITE_FIREWORKS_MODEL=accounts/fireworks/models/qwen3p7-plus).");
+  console.error("[Atomium] VITE_FIREWORKS_MODEL is not configured. Set it in your .env file (e.g. VITE_FIREWORKS_MODEL=accounts/fireworks/models/qwen3p7-plus).");
 }
 
 
 // "Search Online" toggle (Upgrade #10.1): when false, PubChem's live network
 // lookup is skipped entirely and resolution falls back to whatever's already
-// in the in-memory COMPOUND_BLUEPRINTS table / Supabase cache. Gemini
+// in the in-memory COMPOUND_BLUEPRINTS table / Supabase cache. AtomiumAI
 // generation is unaffected by this toggle — it's a separate, explicitly-opt-in
 // AI source.
 export let SEARCH_ONLINE_ENABLED = true;

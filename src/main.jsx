@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
-import ChemLabCanvas from "./ChemLabCanvas.jsx";
+import AtomiumCanvas from "./AtomiumCanvas.jsx";
 import { initializeReactionStore } from "./chemistry/initializeReactionStore";
 
 function AppLoader() {
@@ -20,7 +20,7 @@ function AppLoader() {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        background: "#0f172a", // Deep premium slate blue matching ChemLab aesthetic
+        background: "#0f172a", // Deep premium slate blue matching Atomium aesthetic
         color: "#f8fafc",
         fontFamily: "'Space Grotesk', system-ui, sans-serif",
         gap: 20
@@ -59,7 +59,7 @@ function AppLoader() {
     );
   }
 
-  return <ChemLabCanvas />;
+  return <AtomiumCanvas />;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(

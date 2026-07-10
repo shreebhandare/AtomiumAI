@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 
 const WAITING_MESSAGES = ["Searching...", "Researching...", "Finding your answer..."];
 
-// Gemini chat assistant panel: message thread, input box, expand/collapse.
-// Presentational — all state (messages, input, expanded) lives in ChemLabCanvas.
+// AtomiumAI chat assistant panel: message thread, input box, expand/collapse.
+// Presentational — all state (messages, input, expanded) lives in AtomiumCanvas.
 export default function ChatPanel({
   chatExpanded, setChatExpanded, chatMessages, chatInput, setChatInput,
   sendChatMessage, useAI, isWaitingForAI,

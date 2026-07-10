@@ -152,7 +152,7 @@ export function build3DXYZFallback(atoms, bonds) {
     }
   });
 
-  let xyz = `${n}\nChemLab AI 3D Layout\n`;
+  let xyz = `${n}\nAtomium 3D Layout\n`;
   atoms.forEach((a, i) => {
     const [x, y, z] = pos[i];
     xyz += `${a.sym} ${x.toFixed(4)} ${y.toFixed(4)} ${z.toFixed(4)}\n`;

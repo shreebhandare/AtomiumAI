@@ -89,7 +89,7 @@ export function useChatAssistant({
         recentExperiments: (experimentHistory || []).slice(-5).map(e => ({ name: e.name, reactants: e.reactants, products: e.products })),
       };
 
-      const systemInstructionText = `You are ChemLab AI's chemistry assistant, embedded in a reaction simulation canvas.
+      const systemInstructionText = `You are Atomium's chemistry assistant, embedded in a reaction simulation canvas.
 For every user message, decide which ONE of the response types applies, then respond with ONLY a single valid JSON object matching that type's schema — no markdown code fences, no introductory text, nothing but the raw JSON object.
 
 CAPABILITIES:
@@ -243,7 +243,7 @@ Always return exactly one JSON object of exactly one type — nothing else.`;
 
       if (parsed?.type === "reaction" && Array.isArray(parsed.reactants) && parsed.reactants.length > 0) {
         const fp = fingerprint(parsed.reactants);
-        COMPOUND_BLUEPRINTS[fp] = { ...parsed, fromGemini: true };
+        COMPOUND_BLUEPRINTS[fp] = { ...parsed, fromAtomiumAI: true };
 
         clearAll();
         const radius = 60;

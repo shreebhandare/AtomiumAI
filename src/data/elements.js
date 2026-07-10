@@ -1,5 +1,5 @@
 // Periodic table data and lookup helpers.
-// Extracted verbatim from the original ChemLabCanvas.jsx monolith — no logic changes.
+// Extracted verbatim from the original AtomiumCanvas.jsx monolith — no logic changes.
 
 export const ELEMENTS = [
   { z: 1, sym: "H", name: "Hydrogen", mass: 1.008, group: "nonmetal", color: 0x60a5fa, valence: 1, en: 2.2, shells: [1], row: 1, col: 1 },

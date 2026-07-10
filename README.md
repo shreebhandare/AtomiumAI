@@ -1,4 +1,4 @@
-# ChemLab AI 🧪
+# Atomium 🧪
 
 > An AI-powered interactive virtual chemistry laboratory that makes chemistry visual, interactive, and easier to understand.
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-ChemLab AI is an advanced, interactive virtual chemistry laboratory designed to revolutionize how students and enthusiasts learn chemistry. Instead of relying on static textbook equations, ChemLab AI provides a dynamic, physics-based sandbox where users can drag and drop atoms, form bonds, build complex molecules, and simulate real chemical reactions. Powered by AI and a robust physics engine, it bridges the gap between abstract chemical concepts and tangible, visual understanding.
+Atomium is an advanced, interactive virtual chemistry laboratory designed to revolutionize how students and enthusiasts learn chemistry. Instead of relying on static textbook equations, Atomium provides a dynamic, physics-based sandbox where users can drag and drop atoms, form bonds, build complex molecules, and simulate real chemical reactions. Powered by AI and a robust physics engine, it bridges the gap between abstract chemical concepts and tangible, visual understanding.
 
 ## Problem Statement
 
@@ -17,7 +17,7 @@ Traditional chemistry education often struggles with several key limitations:
 
 ## Solution
 
-ChemLab AI solves these problems by providing a comprehensive, interactive learning environment:
+Atomium solves these problems by providing a comprehensive, interactive learning environment:
 - **Interactive Molecule Building:** Construct molecules visually by dragging atoms together.
 - **Atom-Level Visualization:** See electron shells and atomic structures in real-time.
 - **Simulated Chemical Reactions:** Mix molecules and watch them react according to real chemical rules.
@@ -74,7 +74,7 @@ ChemLab AI solves these problems by providing a comprehensive, interactive learn
 
 ## Demo Workflow
 
-A typical user journey in ChemLab AI:
+A typical user journey in Atomium:
 1. **Open Virtual Lab:** Launch the application and enter the interactive canvas.
 2. **Select Elements:** Open the Periodic Table and drag Hydrogen and Oxygen onto the workspace.
 3. **Build Molecules:** Drag the atoms together to form `H₂` and `O₂` molecules.
@@ -89,7 +89,7 @@ A typical user journey in ChemLab AI:
 
 ## Supported Chemistry Examples
 
-ChemLab AI supports a wide range of chemistry, from basic synthesis to complex organic structures.
+Atomium supports a wide range of chemistry, from basic synthesis to complex organic structures.
 
 **Simple Synthesis:**
 `2H₂ + O₂ → 2H₂O`
@@ -142,10 +142,10 @@ VITE_FIREWORKS_API_KEY=your_fireworks_api_key
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/shreebhandare/ChemLab.git
+git clone https://github.com/shreebhandare/Atomium.git
 
 # Navigate to the project directory
-cd ChemLabAI
+cd AtomiumAI
 
 # Install dependencies
 npm install
@@ -158,7 +158,7 @@ npm run dev
 ```
 ### Running with Docker
 
-ChemLab AI can be easily run using Docker. The multi-stage Dockerfile builds the static assets and serves them via an Nginx container.
+Atomium can be easily run using Docker. The multi-stage Dockerfile builds the static assets and serves them via an Nginx container.
 
 Ensure you have your `.env` file configured in the root directory before building.
 
@@ -191,7 +191,7 @@ docker run -d -p 8080:80 --name chemlab-ui chemlab-ai
 ## Project Structure
 
 ```
-ChemLabAI/
+AtomiumAI/
 ├── src/
 │   ├── components/         # React UI components (Sidebar, Chat, Canvas wrapper, etc.)
 │   ├── chemistry/          # Core chemistry engine (physics, reactions, molecules)
@@ -199,7 +199,7 @@ ChemLabAI/
 │   ├── data/               # Static chemical data (Elements, Periodic Table)
 │   ├── formulaParser.js    # Chemical formula parsing and Hill system normalization
 │   ├── layoutEngine.js     # 2D molecular geometry and layout calculation
-│   ├── ChemLabCanvas.jsx   # Main physics and rendering loop
+│   ├── AtomiumCanvas.jsx   # Main physics and rendering loop
 │   └── main.jsx            # React entry point
 ├── supabase_migration.sql  # Database schema for Supabase
 ├── package.json            # Dependencies and scripts

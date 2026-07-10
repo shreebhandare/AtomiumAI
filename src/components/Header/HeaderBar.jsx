@@ -40,17 +40,22 @@ export default function HeaderBar({
             background: "conic-gradient(#3b82f6,#8b5cf6,#ef4444,#10b981,#3b82f6)",
           }}
         />
-        <span
-          style={{
-            fontFamily: "'Space Grotesk', sans-serif",
-            fontWeight: 700,
-            fontSize: 18,
-            letterSpacing: -0.2,
-            color: "var(--clb-text-primary)",
-          }}
-        >
-          ChemLab <span style={{ color: "#2563eb" }}>AI</span>
-        </span>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <span
+            style={{
+              fontFamily: "'Space Grotesk', sans-serif",
+              fontWeight: 700,
+              fontSize: 18,
+              letterSpacing: -0.2,
+              color: "var(--clb-text-primary)",
+            }}
+          >
+            Atomium <span style={{ color: "#2563eb" }}>AI</span>
+          </span>
+          <span style={{ fontSize: "11px", color: "var(--clb-text-secondary)", marginTop: "-2px" }}>
+            AI based chemistry canvas - Atomium
+          </span>
+        </div>
       </div>
 
       {/* Central Visualization Tabs (Moved from Canvas Area for Maximized Space) */}

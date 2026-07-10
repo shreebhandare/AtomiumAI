@@ -1,5 +1,5 @@
 services:
-  chemlab-ui:
+  atomium-ui:
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,4 +13,4 @@ services:
     env_file:
       - .env
     restart: unless-stopped
-    container_name: chemlab-ai-ui
+    container_name: atomium-ui

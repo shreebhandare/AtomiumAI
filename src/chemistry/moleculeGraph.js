@@ -54,7 +54,7 @@ export function alignAtomsToReactants(atoms, entry) {
 // Groups the atoms currently on the canvas into their bonded connected
 // components — each component IS a complete molecule (the physics/bonding
 // engine only ever writes a full, authoritative bond graph for a component
-// once it matches a known compound blueprint; see ChemLabCanvas's
+// once it matches a known compound blueprint; see AtomiumCanvas's
 // spawnAtomsFromFormula / startReaction). This is the single place the
 // molecule-based reaction engine reads "what molecules are on the canvas
 // right now" from — it never inspects individual atoms past this point.

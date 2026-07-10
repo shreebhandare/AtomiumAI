@@ -1,6 +1,6 @@
 // ───────────────────────── CANONICAL REACTION EQUATION ─────────────────────────
 // Single source of truth for turning a resolved reaction entry into the equation
-// text shown anywhere in ChemLabAI: Inspector previews, completed-reaction cards,
+// text shown anywhere in Atomium: Inspector previews, completed-reaction cards,
 // the diagnostics panel, AI explanations, and any future history/export UI.
 // Every surface should call getCanonicalEquation(entry) rather than formatting
 // reactants/products itself, so a formula never renders two different ways.

@@ -1,6 +1,6 @@
 // Temperature/pressure sliders that drive the physics engine's bonding-
 // probability factors.
-// Presentational — state lives in ChemLabCanvas.
+// Presentational — state lives in AtomiumCanvas.
 export default function ConditionsBar({
   tempK, setTempK, pressureAtm, setPressureAtm,
 }) {

@@ -5,7 +5,7 @@ import ReactionToastStack from "../ReactionToast/ReactionToastStack";
 
 // The reaction canvas itself: status banners (active-reaction / PubChem lookup),
 // the empty-state placeholder, the 3D-mode overlay, the actual <canvas> element
-// (physics rendering lives in ChemLabCanvas — this just hosts the ref + handlers),
+// (physics rendering lives in AtomiumCanvas — this just hosts the ref + handlers),
 // and the zoom controls.
 export default function CanvasStage({
   diagnostics, pubchemStatus, counts, formulaInput, visualMode,
@@ -46,7 +46,7 @@ export default function CanvasStage({
                 ))}
               </div>
             )}
-            {/* PubChem/Gemini lookup status — every branch (including failure) renders
+            {/* PubChem/AtomiumAI lookup status — every branch (including failure) renders
                 something, so a lookup miss is visible rather than silently vanishing. */}
             {pubchemStatus && (
               <div style={{ position: "absolute", top: diagnostics.length > 0 ? 54 : 12, left: "50%", transform: "translateX(-50%)", zIndex: 10 }}>
@@ -63,7 +63,7 @@ export default function CanvasStage({
                   ) : pubchemStatus === "ai-generating" ? (
                     <>
                       <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#2563eb", boxShadow: "0 0 5px #2563eb", animation: "pulse 1s infinite" }} />
-                      <span style={{ color: "#1d4ed8", fontWeight: 500 }}>Gemini — generating reaction data...</span>
+                      <span style={{ color: "#1d4ed8", fontWeight: 500 }}>AtomiumAI — generating reaction data...</span>
                     </>
                   ) : pubchemStatus === "not-found" ? (
                     <>

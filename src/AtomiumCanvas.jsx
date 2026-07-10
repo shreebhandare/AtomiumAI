@@ -19,7 +19,7 @@ import { useLiveRef } from "./hooks/useLiveRef";
 import { useChatAssistant } from "./hooks/useChatAssistant";
 
 // ── Extracted modules (Phase 1 refactor — behavior-preserving split of the ──
-// ── former monolithic ChemLabCanvas.jsx into focused files) ──
+// ── former monolithic AtomiumCanvas.jsx into focused files) ──
 import { ELEMENTS, getElement, getGroupStyles } from "./data/elements";
 import { fingerprint } from "./chemistry/fingerprint";
 import {
@@ -45,7 +45,7 @@ import { persistReactionToSupabase } from "./lookup/reactionPersistence";
 import { registerReaction } from "./chemistry/reactionStore";
 
 // ───────────────────────── MAIN COMPONENT ─────────────────────────
-export default function ChemLabCanvas() {
+export default function AtomiumCanvas() {
   const canvasRef = useRef(null);
   const rafRef = useRef(null);
   const atomsRef = useRef([]);
@@ -111,11 +111,11 @@ export default function ChemLabCanvas() {
 
   // ── Application Theme ──
   const [theme, setThemeState] = useState(() => {
-    try { return localStorage.getItem("chemlab-theme") || "light"; } catch { return "light"; }
+    try { return localStorage.getItem("atomium-theme") || "light"; } catch { return "light"; }
   });
   const handleSetTheme = (t) => {
     setThemeState(t);
-    try { localStorage.setItem("chemlab-theme", t); } catch {}
+    try { localStorage.setItem("atomium-theme", t); } catch {}
   };
   const themeVars = useMemo(() => {
     const themes = {

@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { parseFormula, expandFormulaToAtoms, normalizeFormulaInput } from "../../formulaParser";
 
 // The chemical-formula entry card: validated text input, live atom-count preview,
-// and the Spawn Atoms button. Presentational — all state lives in ChemLabCanvas.
+// and the Spawn Atoms button. Presentational — all state lives in AtomiumCanvas.
 export default function FormulaInput({ formulaInput, setFormulaInput, spawnAtomsFromFormula }) {
   const inputRef = useRef(null);
 
