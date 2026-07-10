@@ -178,10 +178,10 @@ docker build \
   --build-arg VITE_SUPABASE_ANON_KEY=your_key \
   --build-arg VITE_FIREWORKS_API_KEY=your_key \
   --build-arg VITE_FIREWORKS_MODEL=your_model \
-  -t chemlab-ai .
+  -t Atomium-ai .
 
 # Run the container
-docker run -d -p 8080:80 --name chemlab-ui chemlab-ai
+docker run -d -p 8080:80 --name Atomium-ui Atomium-ai
 
 # The application will be available at http://localhost:8080
 ```

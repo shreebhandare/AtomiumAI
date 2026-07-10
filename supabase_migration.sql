@@ -1,4 +1,4 @@
--- DDL Migration for ChemLab chemical reactions database
+-- DDL Migration for Atomium chemical reactions database
 
 -- 1. Create the database version tracking table
 create table if not exists reaction_database_version (
