@@ -45,50 +45,52 @@ export default function ViewModeTabs({
       >
         View
       </span>
-      {tabs.map((tab) => {
-        const isActive = visualMode === tab.id;
-        return (
-          <button
-            key={tab.id}
-            role="tab"
-            aria-selected={isActive}
-            aria-controls={`canvas-panel-${tab.id}`}
-            id={`tab-${tab.id}`}
-            onClick={() => setVisualMode(tab.id)}
-            title={tab.title}
-            style={{
-              padding: "5px 14px",
-              fontSize: "12.5px",
-              fontWeight: "600",
-              fontFamily: "inherit",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-              background: isActive ? "#2563eb" : "transparent",
-              color: isActive ? "#ffffff" : "var(--clb-text-secondary)",
-              boxShadow: isActive ? "0 2px 6px rgba(37,99,235,0.25)" : "none",
-              outline: "none",
-            }}
-            onFocus={(e) => {
-              if (!isActive) e.currentTarget.style.outline = "2px solid #3b82f6";
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.outline = "none";
-            }}
-          >
-            {tab.label}
-          </button>
-        );
-      })}
-
+      <div id="view-mode-tabs" style={{ display: "flex", gap: "2px" }}>
+        {tabs.map((tab) => {
+          const isActive = visualMode === tab.id;
+          return (
+            <button
+              key={tab.id}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`canvas-panel-${tab.id}`}
+              id={`tab-${tab.id}`}
+              onClick={() => setVisualMode(tab.id)}
+              title={tab.title}
+              style={{
+                padding: "5px 14px",
+                fontSize: "12.5px",
+                fontWeight: "600",
+                fontFamily: "inherit",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+                background: isActive ? "#2563eb" : "transparent",
+                color: isActive ? "#ffffff" : "var(--clb-text-secondary)",
+                boxShadow: isActive ? "0 2px 6px rgba(37,99,235,0.25)" : "none",
+                outline: "none",
+              }}
+              onFocus={(e) => {
+                if (!isActive) e.currentTarget.style.outline = "2px solid #3b82f6";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.outline = "none";
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
       {/* Spacer to push controls to the right */}
       <div style={{ flex: 1 }} />
 
       {/* Actions container matching the layout request */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <div id="hud-actions" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
         {/* Start / Stop */}
         <button
+          id="hud-start-stop"
           className="clb-btn"
           style={{
             background: isRunning ? "#dc2626" : "#16a34a",
@@ -106,6 +108,7 @@ export default function ViewModeTabs({
 
         {/* Clear */}
         <button
+          id="hud-clear"
           className="clb-btn"
           style={{
             padding: "6px 12px",

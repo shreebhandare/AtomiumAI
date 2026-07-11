@@ -19,6 +19,7 @@ import ResizeDivider from "./components/ResizeDivider";
 import { useLiveRef } from "./hooks/useLiveRef";
 import { useChatAssistant } from "./hooks/useChatAssistant";
 import { loadMolecule, findSafePosition, buildMoleculeAtomsBonds } from "./services/SpawnService/SpawnService";
+import { useUIStore } from "./stores/UIStore";
 
 // ── Extracted modules (Phase 1 refactor — behavior-preserving split of the ──
 // ── former monolithic AtomiumCanvas.jsx into focused files) ──
@@ -175,6 +176,9 @@ export default function AtomiumCanvas() {
   const [formulaInput, setFormulaInput] = useState("");
   const formulaInputRef = useLiveRef(formulaInput);
 
+  const { tutorialActive, tutorialStep } = useUIStore();
+
+
   const [smartCascade, setSmartCascade] = useState(false);
   const smartCascadeRef = useLiveRef(smartCascade);
 
@@ -202,6 +206,44 @@ export default function AtomiumCanvas() {
   const [experimentHistory, setExperimentHistory] = useState([]);
   const [bottomTab, setBottomTab] = useState("periodic");
   const [isCollapsed, setIsCollapsed] = useState(true);
+
+  // ── Tutorial side-effects ─────────────────────────────────────────────────
+  // Runs whenever the active tutorial step changes and drives UI state changes
+  // needed to make each highlighted element visible before the card appears.
+  useEffect(() => {
+    if (!tutorialActive) return;
+
+    // Step 1 (index 1): "periodic-table" — open the bottom tray on the Elements tab
+    if (tutorialStep === 1) {
+      setBottomTab("periodic");
+      setIsCollapsed(false);
+    }
+
+    // Step 5 (index 5): "inspector" — spawn an O atom and select it so the
+    // Inspector panel shows real data rather than an empty placeholder.
+    if (tutorialStep === 5) {
+      let oAtom = atomsRef.current.find((a) => a.sym === "O");
+      if (!oAtom) {
+        const id = idCounter.current++;
+        oAtom = {
+          id,
+          sym: "O",
+          x: 0,
+          y: 0,
+          vx: 0,
+          vy: 0,
+          shellAngle: 0,
+          shells: [2, 6],
+          instability: 1,
+          vibPhase: 0,
+        };
+        atomsRef.current = [...atomsRef.current, oAtom];
+        setCounts((c) => ({ ...c, atoms: atomsRef.current.length }));
+      }
+      setSelected({ id: oAtom.id, sym: oAtom.sym });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tutorialActive, tutorialStep]);
 
   // ── Panel resize state ──
   const [leftWidth, setLeftWidth] = useState(320);
@@ -2378,7 +2420,7 @@ export default function AtomiumCanvas() {
           />
 
           {/* BOTTOM TRAY: Periodic Table | Molecule Library */}
-          <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
+          <div id="bottom-panel" style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
             {/* Horizontal resize handle — drag to resize the tray height */}
             {!isCollapsed && (
               <ResizeDivider direction="horizontal" onDrag={handleBottomResize} />
@@ -2478,15 +2520,18 @@ export default function AtomiumCanvas() {
         <ResizeDivider direction="vertical" onDrag={handleRightResize} />
 
         {/* RIGHT PANEL — AI CHAT */}
-        <div style={{
-          width: rightWidth,
-          height: "100%",
-          flexShrink: 0,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          borderLeft: `1px solid ${themeVars.border}`,
-        }}>
+        <div
+          id="ai-chat-panel"
+          style={{
+            width: rightWidth,
+            height: "100%",
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            borderLeft: `1px solid ${themeVars.border}`,
+          }}
+        >
           <ChatPanel
             chatExpanded={chatExpanded} setChatExpanded={setChatExpanded}
             chatMessages={chatMessages} chatInput={chatInput} setChatInput={setChatInput}

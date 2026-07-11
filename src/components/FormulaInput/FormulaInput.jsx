@@ -14,7 +14,10 @@ export default function FormulaInput({ formulaInput, setFormulaInput, spawnAtoms
 
   // Chemical Formula Input Card
   return (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+    <div
+      id="formula-input-field"
+      style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}
+    >
             <div style={{ fontSize: 12, fontWeight: 700, color: "var(--clb-text-secondary)", letterSpacing: 1.2 }}>CHEMICAL FORMULA</div>
             <div style={{
               display: "flex",

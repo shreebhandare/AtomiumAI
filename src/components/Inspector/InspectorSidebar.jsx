@@ -71,7 +71,10 @@ export default function InspectorSidebar({
   onRemoveMolecule,
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+    <div
+      id="inspector-sidebar"
+      style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}
+    >
       
       {/* Section 2: Lab Notebook (Scrolling area) */}
       <div style={{

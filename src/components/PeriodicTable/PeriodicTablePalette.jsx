@@ -40,13 +40,16 @@ export default function PeriodicTablePalette({ setHoveredElement, onSelectElemen
   };
 
   return (
-    <div style={{
-      background: "var(--clb-bg-panel)",
-      display: "flex",
-      flexDirection: "column",
-      width: "100%",
-      transition: "background 0.3s ease, border-color 0.3s ease",
-    }}>
+    <div
+      id="periodic-table-header"
+      style={{
+        background: "var(--clb-bg-panel)",
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        transition: "background 0.3s ease, border-color 0.3s ease",
+      }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, maxWidth: 290 }}>
         <span style={{ fontSize: 13 }}>🔎</span>
         <input

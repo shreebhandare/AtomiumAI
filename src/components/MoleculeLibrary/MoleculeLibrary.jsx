@@ -95,6 +95,15 @@ export default function MoleculeLibrary({ onSpawn }) {
         Molecule Library
       </div>
 
+      <div style={{
+        fontSize: "11px",
+        color: "var(--clb-text-muted)",
+        fontStyle: "italic",
+        marginBottom: "4px",
+      }}>
+        Note: The molecules here are populated as you discover them through your practice in this app.
+      </div>
+
       {molecules.length === 0 ? (
         <div style={{ fontSize: "12px", color: "var(--clb-text-muted)", fontStyle: "italic" }}>
           Loading molecules...

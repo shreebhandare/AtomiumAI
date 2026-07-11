@@ -15,7 +15,7 @@ export const TUTORIAL_STEPS = [
   },
   {
     id: "periodic-table",
-    target: "periodic-table-header",
+    target: "bottom-panel",
     title: "Periodic Table",
     description:
       "Search and drag elements from the Periodic Table onto the canvas below, or press Enter to instantly spawn a matched element.",
@@ -31,7 +31,7 @@ export const TUTORIAL_STEPS = [
   },
   {
     id: "canvas-view-tabs",
-    target: "tab-bohr",
+    target: "view-mode-tabs",
     title: "View Modes",
     description:
       "Switch between Bohr (electron shell), 2D (structural bond), and 3D (spatial geometry) visualizations using the tabs above the canvas.",
@@ -39,7 +39,7 @@ export const TUTORIAL_STEPS = [
   },
   {
     id: "canvas-hud",
-    target: "hud-start-stop",
+    target: "hud-actions",
     title: "Simulation Controls",
     description:
       "Use these controls to Start or Stop the reaction simulation, Clear the canvas, and reset or fit the viewport zoom.",
@@ -47,7 +47,7 @@ export const TUTORIAL_STEPS = [
   },
   {
     id: "inspector",
-    target: null,
+    target: "inspector-sidebar",
     title: "Inspector & Lab Notebook",
     description:
       "Click any atom on the canvas to see its detailed properties here. Your discovered reactions are automatically logged to the Lab Notebook below.",
@@ -55,7 +55,7 @@ export const TUTORIAL_STEPS = [
   },
   {
     id: "ai-chat",
-    target: null,
+    target: "ai-chat-panel",
     title: "AI Chemistry Assistant",
     description:
       "Ask the AI to explain reactions, predict outcomes, or even spawn molecules directly by typing commands like [SPAWN: water]!",
