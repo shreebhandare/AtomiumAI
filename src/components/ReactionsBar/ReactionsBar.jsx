@@ -48,7 +48,8 @@ export default function ReactionsBar({ equation }) {
       justifyContent: "center",
       flexShrink: 0,
       minHeight: 52,
-      boxShadow: "0 -2px 10px rgba(0, 0, 0, 0.01)",
+      boxShadow: "0 -6px 20px rgba(0, 0, 0, 0.08)",
+      zIndex: 5,
       transition: "background 0.3s ease, border-color 0.3s ease",
     }}>
       <div style={{

@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 export default function HeaderBar({
   mode,
   setMode,
@@ -15,7 +17,11 @@ export default function HeaderBar({
   setVisualMode,
   theme,
   setTheme,
+  materialFinish,
+  setMaterialFinish,
 }) {
+  const [activeTab, setActiveTab] = useState("general");
+
   return (
     <div
       style={{
@@ -32,12 +38,13 @@ export default function HeaderBar({
     >
       {/* Title / Logo Container */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div
+        <img
+          src={theme === "dark" || theme === "grey" ? "/logo_dark.png" : "/logo_light.png"}
+          alt="AtomiumAI Logo"
           style={{
-            width: 24,
-            height: 24,
-            borderRadius: "50%",
-            background: "conic-gradient(#3b82f6,#8b5cf6,#ef4444,#10b981,#3b82f6)",
+            width: 28,
+            height: 28,
+            objectFit: "contain",
           }}
         />
         <div style={{ display: "flex", flexDirection: "column" }}>
@@ -209,23 +216,25 @@ export default function HeaderBar({
               border: "1px solid #e2e8f0",
               borderRadius: 16,
               boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 1px 1px rgba(0, 0, 0, 0.05)",
-              padding: "24px 28px",
-              width: 400,
-              maxWidth: "90%",
+              width: 600,
+              height: 400,
+              maxWidth: "95%",
+              maxHeight: "90%",
               display: "flex",
               flexDirection: "column",
-              gap: 20,
               animation: "modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+              overflow: "hidden",
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Header */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 borderBottom: "1px solid #f1f5f9",
-                paddingBottom: 14,
+                padding: "16px 24px",
               }}
             >
               <div
@@ -256,154 +265,227 @@ export default function HeaderBar({
               </button>
             </div>
 
-            {/* USE AI TOGGLE */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ flex: 1, paddingRight: 16 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>🤖 Use AI</div>
-                  <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>
-                    Enable AI-powered chemistry assistant for natural language help and reaction suggestions.
-                  </div>
-                </div>
-                <button
-                  className="clb-btn"
-                  onClick={toggleUseAI}
-                  style={{
-                    fontSize: 12,
-                    padding: "6px 14px",
-                    minWidth: 56,
-                    background: useAI ? "#10b981" : "#f1f5f9",
-                    borderColor: useAI ? "#10b981" : "#cbd5e1",
-                    color: useAI ? "#ffffff" : "#475569",
-                    fontWeight: 600,
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  {useAI ? "Yes" : "No"}
-                </button>
-              </div>
-            </div>
-
-            <div style={{ height: 1, background: "#f1f5f9" }} />
-
-            {/* SEARCH ONLINE CONFIG */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ flex: 1, paddingRight: 16 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>🌐 Search Online</div>
-                  <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>
-                    Query online databases for active compound and reaction lookups. When off, uses cache only.
-                  </div>
-                </div>
-                <button
-                  className="clb-btn"
-                  onClick={toggleSearchOnline}
-                  style={{
-                    fontSize: 12,
-                    padding: "6px 14px",
-                    minWidth: 56,
-                    background: searchOnline ? "#10b981" : "#f1f5f9",
-                    borderColor: searchOnline ? "#10b981" : "#cbd5e1",
-                    color: searchOnline ? "#ffffff" : "#475569",
-                    fontWeight: 600,
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  {searchOnline ? "Yes" : "No"}
-                </button>
-              </div>
-            </div>
-
-            <div style={{ height: 1, background: "#f1f5f9" }} />
-
-            {/* REACTION EQUATION MODE */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ flex: 1, paddingRight: 16 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>⚗️ Reaction Equation Mode</div>
-                <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>
-                  Controls how the equation is displayed in the Reactions Bar.
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <button
-                  className="clb-btn"
-                  onClick={() => setEquationMode("experiment")}
-                  style={{
-                    fontSize: 12,
-                    padding: "6px 12px",
-                    background: equationMode === "experiment" ? "#2563eb" : "#f1f5f9",
-                    borderColor: equationMode === "experiment" ? "#2563eb" : "#cbd5e1",
-                    color: equationMode === "experiment" ? "#ffffff" : "#475569",
-                    fontWeight: 600,
-                  }}
-                >
-                  Experiment
-                </button>
-                <button
-                  className="clb-btn"
-                  onClick={() => setEquationMode("standard")}
-                  style={{
-                    fontSize: 12,
-                    padding: "6px 12px",
-                    background: equationMode === "standard" ? "#2563eb" : "#f1f5f9",
-                    borderColor: equationMode === "standard" ? "#2563eb" : "#cbd5e1",
-                    color: equationMode === "standard" ? "#ffffff" : "#475569",
-                    fontWeight: 600,
-                  }}
-                >
-                  Standard Chemistry
-                </button>
-              </div>
-            </div>
-
-            <div style={{ height: 1, background: "#f1f5f9" }} />
-
-            {/* APPLICATION THEME */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ flex: 1, paddingRight: 16 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>🎨 App Theme</div>
-                <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>
-                  Select the color palette for your lab workbench.
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+            {/* Content Area with Sidebar and Main display */}
+            <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+              {/* Sidebar */}
+              <div
+                style={{
+                  width: 180,
+                  background: "#f8fafc",
+                  borderRight: "1px solid #f1f5f9",
+                  padding: "16px 12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
                 {[
-                  { id: "light", label: "Light" },
-                  { id: "dawn", label: "Dawn" },
-                  { id: "dark", label: "Dark" },
-                  { id: "grey", label: "Grey" }
-                ].map((t) => {
-                  const isActive = theme === t.id;
+                  { id: "general", label: "🌐 General" },
+                  { id: "appearance", label: "🎨 Appearance" },
+                ].map((tab) => {
+                  const isActive = activeTab === tab.id;
                   return (
                     <button
-                      key={t.id}
-                      className="clb-btn"
-                      onClick={() => setTheme(t.id)}
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
                       style={{
-                        flex: 1,
-                        fontSize: 12,
-                        padding: "6px 12px",
-                        background: isActive ? "#2563eb" : "#f1f5f9",
-                        borderColor: isActive ? "#2563eb" : "#cbd5e1",
-                        color: isActive ? "#ffffff" : "#475569",
-                        fontWeight: 600,
+                        padding: "10px 14px",
+                        fontSize: "13px",
+                        fontWeight: isActive ? 600 : 500,
+                        textAlign: "left",
+                        border: "none",
+                        borderRadius: 8,
+                        background: isActive ? "#e2e8f0" : "transparent",
+                        color: isActive ? "#0f172a" : "#64748b",
+                        cursor: "pointer",
                         transition: "all 0.15s ease",
                       }}
                     >
-                      {t.label}
+                      {tab.label}
                     </button>
                   );
                 })}
               </div>
+
+              {/* Main Content Area */}
+              <div
+                style={{
+                  flex: 1,
+                  padding: "20px 24px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 20,
+                  overflowY: "auto",
+                }}
+              >
+                {activeTab === "general" && (
+                  <>
+                    {/* SEARCH ONLINE CONFIG */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ flex: 1, paddingRight: 16 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>🌐 Search Online</div>
+                          <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>
+                            Query online databases for active compound and reaction lookups. When off, uses cache only.
+                          </div>
+                        </div>
+                        <button
+                          className="clb-btn"
+                          onClick={toggleSearchOnline}
+                          style={{
+                            fontSize: 12,
+                            padding: "6px 14px",
+                            minWidth: 56,
+                            background: searchOnline ? "#10b981" : "#f1f5f9",
+                            borderColor: searchOnline ? "#10b981" : "#cbd5e1",
+                            color: searchOnline ? "#ffffff" : "#475569",
+                            fontWeight: 600,
+                            transition: "all 0.2s ease",
+                          }}
+                        >
+                          {searchOnline ? "Yes" : "No"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ height: 1, background: "#f1f5f9" }} />
+
+                    {/* REACTION EQUATION MODE */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ flex: 1, paddingRight: 16 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>⚗️ Reaction Equation Mode</div>
+                        <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>
+                          Controls how the equation is displayed in the Reactions Bar.
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                        <button
+                          className="clb-btn"
+                          onClick={() => setEquationMode("experiment")}
+                          style={{
+                            fontSize: 12,
+                            padding: "6px 12px",
+                            background: equationMode === "experiment" ? "#2563eb" : "#f1f5f9",
+                            borderColor: equationMode === "experiment" ? "#2563eb" : "#cbd5e1",
+                            color: equationMode === "experiment" ? "#ffffff" : "#475569",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Experiment
+                        </button>
+                        <button
+                          className="clb-btn"
+                          onClick={() => setEquationMode("standard")}
+                          style={{
+                            fontSize: 12,
+                            padding: "6px 12px",
+                            background: equationMode === "standard" ? "#2563eb" : "#f1f5f9",
+                            borderColor: equationMode === "standard" ? "#2563eb" : "#cbd5e1",
+                            color: equationMode === "standard" ? "#ffffff" : "#475569",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Standard Chemistry
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTab === "appearance" && (
+                  <>
+                    {/* APPLICATION THEME */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ flex: 1, paddingRight: 16 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>🎨 App Theme</div>
+                        <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>
+                          Select the color palette for your lab workbench.
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                        {[
+                          { id: "light", label: "Light" },
+                          { id: "dawn", label: "Dawn" },
+                          { id: "dark", label: "Dark" },
+                          { id: "grey", label: "Grey" }
+                        ].map((t) => {
+                          const isActive = theme === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              className="clb-btn"
+                              onClick={() => setTheme(t.id)}
+                              style={{
+                                flex: 1,
+                                fontSize: 12,
+                                padding: "6px 12px",
+                                background: isActive ? "#2563eb" : "#f1f5f9",
+                                borderColor: isActive ? "#2563eb" : "#cbd5e1",
+                                color: isActive ? "#ffffff" : "#475569",
+                                fontWeight: 600,
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              {t.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div style={{ height: 1, background: "#f1f5f9" }} />
+
+                    {/* 3D MATERIAL FINISH */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ flex: 1, paddingRight: 16 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>✨ 3D Material Finish</div>
+                        <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>
+                          Toggle between glossy (shiny reflections) and matte (flat, diffuse) surfaces in 3D view.
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                        <button
+                          className="clb-btn"
+                          onClick={() => setMaterialFinish("glossy")}
+                          style={{
+                            fontSize: 12,
+                            padding: "6px 12px",
+                            background: materialFinish === "glossy" ? "#2563eb" : "#f1f5f9",
+                            borderColor: materialFinish === "glossy" ? "#2563eb" : "#cbd5e1",
+                            color: materialFinish === "glossy" ? "#ffffff" : "#475569",
+                            fontWeight: 600,
+                          }}
+                        >
+                          ✨ Glossy
+                        </button>
+                        <button
+                          className="clb-btn"
+                          onClick={() => setMaterialFinish("matte")}
+                          style={{
+                            fontSize: 12,
+                            padding: "6px 12px",
+                            background: materialFinish === "matte" ? "#2563eb" : "#f1f5f9",
+                            borderColor: materialFinish === "matte" ? "#2563eb" : "#cbd5e1",
+                            color: materialFinish === "matte" ? "#ffffff" : "#475569",
+                            fontWeight: 600,
+                          }}
+                        >
+                          🪨 Matte
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
+            {/* Footer */}
             <div
               style={{
                 display: "flex",
                 justifyContent: "flex-end",
-                marginTop: 8,
                 borderTop: "1px solid #f1f5f9",
-                paddingTop: 14,
+                padding: "16px 24px",
               }}
             >
               <button

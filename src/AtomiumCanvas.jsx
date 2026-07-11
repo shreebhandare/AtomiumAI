@@ -117,6 +117,15 @@ export default function AtomiumCanvas() {
     setThemeState(t);
     try { localStorage.setItem("atomium-theme", t); } catch {}
   };
+
+  // ── 3D Material Finish ──
+  const [materialFinish, setMaterialFinishState] = useState(() => {
+    try { return localStorage.getItem("atomium-3d-finish") || "glossy"; } catch { return "glossy"; }
+  });
+  const handleSetMaterialFinish = (finish) => {
+    setMaterialFinishState(finish);
+    try { localStorage.setItem("atomium-3d-finish", finish); } catch {}
+  };
   const themeVars = useMemo(() => {
     const themes = {
       light: {
@@ -823,8 +832,8 @@ export default function AtomiumCanvas() {
         ctx.lineTo(atomB.x + px, atomB.y + py);
         ctx.strokeStyle = grad;
         // In simple 2D mode, bonds are subtle by default, fully visible on hover/highlight
-        ctx.lineWidth = isHighlighted ? 2.5 : (vmode === "simple" ? 1.5 : 2);
-        ctx.globalAlpha = isHighlighted ? 0.95 : (vmode === "simple" ? 0.15 : 0.8);
+        ctx.lineWidth = isHighlighted ? 2.5 : (vmode === "simple" ? 1.8 : 2);
+        ctx.globalAlpha = isHighlighted ? 0.95 : (vmode === "simple" ? 0.45 : 0.8);
         // Ionic bonds are electrostatic attraction, not a shared electron pair —
         // rendered dashed to visually distinguish from solid covalent bonds
         // (explained in the Simple Mode one-time legend).
@@ -2121,7 +2130,27 @@ export default function AtomiumCanvas() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: themeVars.bgApp, color: themeVars.textPrimary, fontFamily: "'Space Grotesk', system-ui, sans-serif", fontSize: "14.5px", overflow: "hidden", transition: "background 0.3s ease, color 0.3s ease" }}>
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      height: "100vh",
+      background: themeVars.bgApp,
+      color: themeVars.textPrimary,
+      fontFamily: "'Space Grotesk', system-ui, sans-serif",
+      fontSize: "14.5px",
+      overflow: "hidden",
+      transition: "background 0.3s ease, color 0.3s ease",
+      "--clb-bg-app": themeVars.bgApp,
+      "--clb-bg-panel": themeVars.bgPanel,
+      "--clb-bg-card": themeVars.bgCard,
+      "--clb-bg-hover": themeVars.bgHover,
+      "--clb-bg-canvas": themeVars.bgApp,
+      "--clb-border": themeVars.border,
+      "--clb-border-accent": themeVars.borderAccent,
+      "--clb-text-primary": themeVars.textPrimary,
+      "--clb-text-secondary": themeVars.textSecondary,
+      "--clb-text-muted": themeVars.textMuted,
+    }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
         
@@ -2207,6 +2236,7 @@ export default function AtomiumCanvas() {
         useAI={useAI} toggleUseAI={() => setUseAI(v => !v)}
         visualMode={visualMode} setVisualMode={setVisualMode}
         theme={theme} setTheme={handleSetTheme}
+        materialFinish={materialFinish} setMaterialFinish={handleSetMaterialFinish}
       />
 
       {/* MAIN */}
@@ -2216,6 +2246,8 @@ export default function AtomiumCanvas() {
           width: 320,
           background: themeVars.bgPanel,
           borderRight: `1px solid ${themeVars.border}`,
+          boxShadow: "4px 0 24px rgba(0, 0, 0, 0.08)",
+          zIndex: 10,
           padding: 16,
           display: "flex",
           flexDirection: "column",
@@ -2255,6 +2287,7 @@ export default function AtomiumCanvas() {
             distinctMolecules={distinctMolecules}
             selected3DMoleculeIndex={selected3DMoleculeIndex}
             setSelected3DMoleculeIndex={setSelected3DMoleculeIndex}
+            materialFinish={materialFinish}
           />
 
           {/* REACTIONS BAR */}

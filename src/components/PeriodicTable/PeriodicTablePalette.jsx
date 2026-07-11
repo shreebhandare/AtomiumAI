@@ -43,7 +43,6 @@ export default function PeriodicTablePalette({ setHoveredElement, onSelectElemen
   return (
     <div style={{
       background: "var(--clb-bg-canvas)",
-      borderTop: "1px solid var(--clb-border)",
       flexShrink: 0,
       display: "flex",
       flexDirection: "column",
@@ -57,8 +56,9 @@ export default function PeriodicTablePalette({ setHoveredElement, onSelectElemen
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "10px 24px",
-          borderBottom: isCollapsed ? "none" : "1px solid #e2e8f0",
+          padding: "12px 24px",
+          borderTop: "1px solid var(--clb-border)",
+          borderBottom: "1px solid var(--clb-border)",
           background: "var(--clb-bg-panel)",
           cursor: "pointer",
           userSelect: "none",

@@ -1,6 +1,8 @@
 // Fireworks AI fallback: used only when PubChem has no record for an atom combination
 // and the user has supplied a Fireworks API key.
 
+import { canonicalElementOrder } from "../formulaParser";
+
 export async function fetchWithRetry(url, options, maxRetries = 3, initialDelay = 1000) {
   let delay = initialDelay;
   for (let i = 0; i < maxRetries; i++) {
@@ -26,10 +28,11 @@ export async function fetchWithRetry(url, options, maxRetries = 3, initialDelay 
 // the user has supplied a Fireworks API key. Asks Fireworks for a single reaction
 // object matching the exact same schema as the static COMPOUND_BLUEPRINTS table.
 export async function generateReactionWithFireworks(fp, syms, apiKey, model) {
+  const sortedSyms = canonicalElementOrder([...syms]);
   const prompt = `You are generating chemistry reaction data for a browser-based bonding simulation engine.
 Output ONLY a single valid JSON object — no prose, no markdown fences, no comments.
 
-The reactants are exactly these atoms (you choose their order in "reactants"): ${syms.join(", ")}.
+The reactants are exactly these atoms: ${sortedSyms.join(", ")}.
 
 SCHEMA (strict):
 {
@@ -44,7 +47,7 @@ SCHEMA (strict):
 }
 
 RULES:
-- "reactants" must be exactly these ${syms.length} symbols, in any order: [${syms.map((s) => `"${s}"`).join(", ")}].
+- "reactants" must be exactly these ${sortedSyms.length} symbols, in this exact order: [${sortedSyms.map((s) => `"${s}"`).join(", ")}].
 - Only return this reaction if it is chemically real and well-established. If these atoms do not
   form a known, stable molecule together in one step, return exactly: {"invalid": true}
 - HARD LIMIT: never assume more than 10 total atoms.
@@ -68,6 +71,7 @@ RULES:
       },
       body: JSON.stringify({
         model,
+        temperature: 0,
         messages: [
           { role: "user", content: prompt }
         ]

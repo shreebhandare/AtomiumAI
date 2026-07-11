@@ -1,6 +1,8 @@
 // Coordination-compound detection and radial layout (metal centre + ligand shells
 // + counter-ion rings) for PubChem entries whose bond graph centers on a metal atom.
 
+import { getSeededRandom, getSeedFromEntry } from '../layoutEngine';
+
 export const COORDINATION_METALS = new Set([
   'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni', 'Cu', 'Zn',
   'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd', 'Ag', 'Cd',
@@ -149,9 +151,10 @@ export function buildCoordinationLayout(entry, coordInfo, centroid) {
   });
 
   // Fallback: any atom still null gets a fallback position
+  const rand = getSeededRandom(getSeedFromEntry(entry));
   for (let i = 0; i < n; i++) {
     if (!positions[i]) {
-      positions[i] = { x: centroid.x + (Math.random() - 0.5) * 60, y: centroid.y + (Math.random() - 0.5) * 60 };
+      positions[i] = { x: centroid.x + (rand() - 0.5) * 60, y: centroid.y + (rand() - 0.5) * 60 };
     }
   }
 

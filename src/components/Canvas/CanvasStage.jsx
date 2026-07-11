@@ -15,6 +15,7 @@ export default function CanvasStage({
   reactionToasts, dismissReactionToast,
   orbitSpeed, setOrbitSpeed,
   distinctMolecules, selected3DMoleculeIndex, setSelected3DMoleculeIndex,
+  materialFinish,
 }) {
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -102,6 +103,7 @@ export default function CanvasStage({
                   distinctMolecules={distinctMolecules}
                   selected3DMoleculeIndex={selected3DMoleculeIndex}
                   setSelected3DMoleculeIndex={setSelected3DMoleculeIndex}
+                  materialFinish={materialFinish}
                 />
               </div>
             )}

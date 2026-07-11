@@ -25,24 +25,24 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── CPK Element lookup table ────────────────────────────────────────────────
 const ELEMENT_INFO = {
-  H:  { name: "Hydrogen",    number: 1,  color: "#DDDDDD" },
-  C:  { name: "Carbon",      number: 6,  color: "#909090" },
-  N:  { name: "Nitrogen",    number: 7,  color: "#3050F8" },
-  O:  { name: "Oxygen",      number: 8,  color: "#FF0D0D" },
-  F:  { name: "Fluorine",    number: 9,  color: "#90E050" },
-  P:  { name: "Phosphorus",  number: 15, color: "#FF8000" },
-  S:  { name: "Sulfur",      number: 16, color: "#FFFF30" },
-  CL: { name: "Chlorine",    number: 17, color: "#1FF01F" },
-  NA: { name: "Sodium",      number: 11, color: "#AB5CF2" },
-  MG: { name: "Magnesium",   number: 12, color: "#8AFF00" },
-  CA: { name: "Calcium",     number: 20, color: "#3DFF00" },
-  FE: { name: "Iron",        number: 26, color: "#E06633" },
-  CU: { name: "Copper",      number: 29, color: "#C88033" },
-  ZN: { name: "Zinc",        number: 30, color: "#7D80B0" },
-  K:  { name: "Potassium",   number: 19, color: "#8F40D4" },
-  SI: { name: "Silicon",     number: 14, color: "#F0C8A0" },
-  LI: { name: "Lithium",     number: 3,  color: "#CC80FF" },
-  B:  { name: "Boron",       number: 5,  color: "#FFB5B5" },
+  H: { name: "Hydrogen", number: 1, color: "#DDDDDD" },
+  C: { name: "Carbon", number: 6, color: "#909090" },
+  N: { name: "Nitrogen", number: 7, color: "#3050F8" },
+  O: { name: "Oxygen", number: 8, color: "#FF0D0D" },
+  F: { name: "Fluorine", number: 9, color: "#90E050" },
+  P: { name: "Phosphorus", number: 15, color: "#FF8000" },
+  S: { name: "Sulfur", number: 16, color: "#FFFF30" },
+  CL: { name: "Chlorine", number: 17, color: "#1FF01F" },
+  NA: { name: "Sodium", number: 11, color: "#AB5CF2" },
+  MG: { name: "Magnesium", number: 12, color: "#8AFF00" },
+  CA: { name: "Calcium", number: 20, color: "#3DFF00" },
+  FE: { name: "Iron", number: 26, color: "#E06633" },
+  CU: { name: "Copper", number: 29, color: "#C88033" },
+  ZN: { name: "Zinc", number: 30, color: "#7D80B0" },
+  K: { name: "Potassium", number: 19, color: "#8F40D4" },
+  SI: { name: "Silicon", number: 14, color: "#F0C8A0" },
+  LI: { name: "Lithium", number: 3, color: "#CC80FF" },
+  B: { name: "Boron", number: 5, color: "#FFB5B5" },
 };
 
 function getElementInfo(sym) {
@@ -50,16 +50,19 @@ function getElementInfo(sym) {
 }
 
 // ─── Style spec builders ─────────────────────────────────────────────────────
-function buildStyleSpec(style) {
+function buildStyleSpec(style, finish = "glossy") {
+  // Glossy: larger spheres, higher radius sticks for a fuller, shinier look
+  // Matte: smaller, flatter proportions
+  const isGlossy = finish === "glossy";
   switch (style) {
-    case "stick":       return { stick:  { colorscheme: "Jmol", radius: 0.18 } };
-    case "sphere":      return { sphere: { colorscheme: "Jmol", scale: 0.9 } };
-    case "line":        return { line:   { colorscheme: "Jmol" } };
+    case "stick": return { stick: { colorscheme: "Jmol", radius: isGlossy ? 0.20 : 0.15 } };
+    case "sphere": return { sphere: { colorscheme: "Jmol", scale: isGlossy ? 1.0 : 0.85 } };
+    case "line": return { line: { colorscheme: "Jmol" } };
     case "ballAndStick":
     default:
       return {
-        sphere: { colorscheme: "Jmol", scale: 0.28 },
-        stick:  { colorscheme: "Jmol", radius: 0.12 },
+        sphere: { colorscheme: "Jmol", scale: isGlossy ? 0.38 : 0.24 },
+        stick: { colorscheme: "Jmol", radius: isGlossy ? 0.16 : 0.10 },
       };
   }
 }
@@ -81,26 +84,27 @@ function formatFormulaUnicode(formula) {
 export default function Molecule3DViewer({
   modelData, format, sdfData, molData, xyzData, pdbData, title,
   distinctMolecules = [], selected3DMoleculeIndex = 0, setSelected3DMoleculeIndex,
+  materialFinish = "glossy",
 }) {
-  const containerRef  = useRef(null);
-  const viewerRef     = useRef(null);   // $3Dmol viewer instance
-  const rafRef        = useRef(null);   // pending requestAnimationFrame
+  const containerRef = useRef(null);
+  const viewerRef = useRef(null);   // $3Dmol viewer instance
+  const rafRef = useRef(null);   // pending requestAnimationFrame
   const hoverLabelRef = useRef(null);
-  const resizeObsRef  = useRef(null);
+  const resizeObsRef = useRef(null);
 
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [currentStyle, setCurrentStyle] = useState("ballAndStick");
-  const [showLabels,   setShowLabels]   = useState(false);
+  const [showLabels, setShowLabels] = useState(false);
   const [selectedAtom, setSelectedAtom] = useState(null);
 
   // Resolve which data + format to use (SDF preferred)
   const { activeData, activeFormat } = (() => {
-    if (sdfData)    return { activeData: sdfData,    activeFormat: "sdf" };
-    if (molData)    return { activeData: molData,    activeFormat: "mol" };
-    if (xyzData)    return { activeData: xyzData,    activeFormat: "xyz" };
-    if (pdbData)    return { activeData: pdbData,    activeFormat: "pdb" };
-    if (modelData)  return { activeData: modelData,  activeFormat: format || "sdf" };
+    if (sdfData) return { activeData: sdfData, activeFormat: "sdf" };
+    if (molData) return { activeData: molData, activeFormat: "mol" };
+    if (xyzData) return { activeData: xyzData, activeFormat: "xyz" };
+    if (pdbData) return { activeData: pdbData, activeFormat: "pdb" };
+    if (modelData) return { activeData: modelData, activeFormat: format || "sdf" };
     return { activeData: "", activeFormat: "" };
   })();
 
@@ -172,7 +176,7 @@ export default function Molecule3DViewer({
       if (!model) throw new Error("Model parse returned null — check the format/data.");
 
       // Apply initial style
-      viewer.setStyle({}, buildStyleSpec(currentStyle));
+      viewer.setStyle({}, buildStyleSpec(currentStyle, materialFinish));
 
       // Hover: show element label near atom
       viewer.setHoverable({}, true,
@@ -203,10 +207,10 @@ export default function Molecule3DViewer({
       viewer.setClickable({}, true, (atom) => {
         const info = getElementInfo(atom.elem);
         setSelectedAtom({
-          elem:   atom.elem,
-          name:   info.name,
+          elem: atom.elem,
+          name: info.name,
           number: info.number,
-          color:  info.color,
+          color: info.color,
           x: atom.x?.toFixed(3) ?? "—",
           y: atom.y?.toFixed(3) ?? "—",
           z: atom.z?.toFixed(3) ?? "—",
@@ -217,7 +221,7 @@ export default function Molecule3DViewer({
         viewer.setStyle({}, buildStyleSpec(currentStyle));
         viewer.setStyle({ index: atom.index }, {
           sphere: { color: "#fbbf24", scale: 0.46, opacity: 0.85 },
-          stick:  buildStyleSpec(currentStyle).stick || {},
+          stick: buildStyleSpec(currentStyle).stick || {},
         });
         scheduleRender();
       });
@@ -237,7 +241,7 @@ export default function Molecule3DViewer({
     const viewer = viewerRef.current;
     if (!viewer) return;
 
-    viewer.setStyle({}, buildStyleSpec(currentStyle));
+    viewer.setStyle({}, buildStyleSpec(currentStyle, materialFinish));
     viewer.removeAllLabels();
     hoverLabelRef.current = null;
 
@@ -254,12 +258,24 @@ export default function Molecule3DViewer({
       });
     }
     scheduleRender();
-  }, [currentStyle, showLabels, scheduleRender]);
+  }, [currentStyle, showLabels, materialFinish, scheduleRender]);
+
+  // ── Apply glossy/matte CSS filter to the container ──────────────────────
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (materialFinish === "glossy") {
+      el.style.filter = "contrast(1.08) saturate(1.15)";
+    } else {
+      el.style.filter = "contrast(0.92) saturate(0.80) brightness(1.04)";
+    }
+    return () => { el.style.filter = ""; };
+  }, [materialFinish]);
 
   // ── Toolbar callbacks ────────────────────────────────────────────────────
-  const handleReset   = () => { viewerRef.current?.zoomTo();     scheduleRender(); };
-  const handleZoomIn  = () => { viewerRef.current?.zoom(1.18);   scheduleRender(); };
-  const handleZoomOut = () => { viewerRef.current?.zoom(0.83);   scheduleRender(); };
+  const handleReset = () => { viewerRef.current?.zoomTo(); scheduleRender(); };
+  const handleZoomIn = () => { viewerRef.current?.zoom(1.18); scheduleRender(); };
+  const handleZoomOut = () => { viewerRef.current?.zoom(0.83); scheduleRender(); };
   const handleScreenshot = () => {
     try {
       const uri = viewerRef.current?.png();
@@ -487,11 +503,11 @@ export default function Molecule3DViewer({
         {/* Action buttons */}
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           {[
-            { label: "+",    title: "Zoom In",       action: handleZoomIn,    w: 28 },
-            { label: "−",    title: "Zoom Out",      action: handleZoomOut,   w: 28 },
-            { label: "⌂",   title: "Reset View",    action: handleReset,     w: 28, fs: 14 },
+            { label: "+", title: "Zoom In", action: handleZoomIn, w: 28 },
+            { label: "−", title: "Zoom Out", action: handleZoomOut, w: 28 },
+            { label: "⌂", title: "Reset View", action: handleReset, w: 28, fs: 14 },
             { label: "LABELS", title: "Toggle Atom Labels", action: () => setShowLabels(v => !v), active: showLabels, px: 8 },
-            { label: "📸",   title: "Screenshot",   action: handleScreenshot, w: 28, fs: 13 },
+            { label: "📸", title: "Screenshot", action: handleScreenshot, w: 28, fs: 13 },
           ].map(({ label, title, action, active, w, px, fs }) => (
             <button
               key={label}

@@ -12,6 +12,28 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { supabase } from './supabase';
 
+// ─── Seeded Random Generator (Deterministic PRNG) ───────────────────────────
+export function getSeededRandom(seedString) {
+  let hash = 0;
+  for (let i = 0; i < seedString.length; i++) {
+    hash = (hash << 5) - hash + seedString.charCodeAt(i);
+    hash |= 0;
+  }
+  let a = Math.abs(hash) || 1;
+  return function() {
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function getSeedFromEntry(entry) {
+  if (!entry) return 'default-seed';
+  return entry.fp || entry.formula || entry.name || (entry.reactants ? entry.reactants.join('-') : 'default-seed');
+}
+
+
 // ─── Configuration ────────────────────────────────────────────────────────────
 export const BOND_LENGTH_PX   = 90;   // standard bond length in pixels
 const QUALITY_THRESHOLD       = 25;   // score below this → accept PubChem layout as-is
@@ -224,9 +246,10 @@ export function buildRingAwareLayout(entry, centroid) {
   }
   for (let i = 0; i < n; i++) { if (placed.has(i)) placeChain(i); }
 
+  const rand = getSeededRandom(getSeedFromEntry(entry));
   for (let i = 0; i < n; i++) {
     if (!positions[i]) {
-      positions[i] = { x: centroid.x + (Math.random() - 0.5) * 60, y: centroid.y + (Math.random() - 0.5) * 60 };
+      positions[i] = { x: centroid.x + (rand() - 0.5) * 60, y: centroid.y + (rand() - 0.5) * 60 };
     }
   }
   return positions;
@@ -247,6 +270,7 @@ export function buildFDRefinement(entry, initPositions) {
   const K_REPEL   = BOND_LENGTH_PX * BOND_LENGTH_PX * 2.2;
   const MAX_STEP  = 20;
 
+  const rand = getSeededRandom(getSeedFromEntry(entry));
   for (let iter = 0; iter < FD_MAX_ITERATIONS; iter++) {
     const force = Array.from({ length: n }, () => ({ x: 0, y: 0 }));
 
@@ -264,8 +288,8 @@ export function buildFDRefinement(entry, initPositions) {
         let dx = pos[j].x - pos[i].x;
         let dy = pos[j].y - pos[i].y;
         if (dx === 0 && dy === 0) {
-          dx = (Math.random() - 0.5) * 0.2;
-          dy = (Math.random() - 0.5) * 0.2;
+          dx = (rand() - 0.5) * 0.2;
+          dy = (rand() - 0.5) * 0.2;
         }
         const dist2 = dx * dx + dy * dy || 1;
         const dist = Math.sqrt(dist2);
@@ -311,30 +335,85 @@ export function denormalizePositions(normalizedPositions, centroid) {
   }));
 }
 
-// ─── Supabase Layout Cache ────────────────────────────────────────────────────
-const inMemoryLayoutCache = new Map(); // CID → normalized positions[]
+// ─── Supabase/LocalStorage Layout Cache ────────────────────────────────────────────
+const inMemoryLayoutCache = new Map(); // key -> normalized positions[]
 
-export function clearLayoutCache() { inMemoryLayoutCache.clear(); }
-
-export async function loadCachedLayout(cid) {
-  if (!cid) return null;
-  if (inMemoryLayoutCache.has(cid)) return inMemoryLayoutCache.get(cid);
+export function clearLayoutCache() {
+  inMemoryLayoutCache.clear();
   try {
-    const { data } = await supabase.from('layout_cache').select('positions').eq('cid', cid).maybeSingle();
-    if (!data) return null;
-    inMemoryLayoutCache.set(cid, data.positions);
-    console.log(`[Layout] Supabase cache hit for CID=${cid}`);
-    return data.positions;
-  } catch (_) { return null; }
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("layout_cache:")) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (_) {}
+}
+
+export async function loadCachedLayout(cid, fp) {
+  const key = cid ? `cid:${cid}` : (fp ? `fp:${fp}` : null);
+  if (!key) return null;
+  if (inMemoryLayoutCache.has(key)) return inMemoryLayoutCache.get(key);
+
+  // 1. Try LocalStorage fallback first (fast, synchronous, works offline)
+  try {
+    const local = localStorage.getItem(`layout_cache:${key}`);
+    if (local) {
+      const parsed = JSON.parse(local);
+      inMemoryLayoutCache.set(key, parsed);
+      console.log(`[Layout] LocalStorage cache hit for key=${key}`);
+      return parsed;
+    }
+  } catch (_) {}
+
+  // 2. Try Supabase
+  if (cid) {
+    try {
+      const { data } = await supabase.from('layout_cache').select('positions').eq('cid', cid).maybeSingle();
+      if (data) {
+        inMemoryLayoutCache.set(key, data.positions);
+        try {
+          localStorage.setItem(`layout_cache:${key}`, JSON.stringify(data.positions));
+        } catch (_) {}
+        console.log(`[Layout] Supabase cache hit for CID=${cid}`);
+        return data.positions;
+      }
+    } catch (_) {}
+  } else if (fp) {
+    try {
+      const { data } = await supabase.from('layout_cache').select('positions').eq('fp', fp).maybeSingle();
+      if (data) {
+        inMemoryLayoutCache.set(key, data.positions);
+        try {
+          localStorage.setItem(`layout_cache:${key}`, JSON.stringify(data.positions));
+        } catch (_) {}
+        console.log(`[Layout] Supabase cache hit for Fingerprint=${fp}`);
+        return data.positions;
+      }
+    } catch (_) {}
+  }
+  return null;
 }
 
 export async function saveCachedLayout(cid, fp, normalizedPositions, score) {
-  if (!cid) return;
-  inMemoryLayoutCache.set(cid, normalizedPositions);
+  const key = cid ? `cid:${cid}` : (fp ? `fp:${fp}` : null);
+  if (!key) return;
+  inMemoryLayoutCache.set(key, normalizedPositions);
+
+  // 1. Save to LocalStorage
   try {
-    await supabase.from('layout_cache').upsert({ cid, fp, positions: normalizedPositions, score }, { onConflict: 'cid' });
+    localStorage.setItem(`layout_cache:${key}`, JSON.stringify(normalizedPositions));
+  } catch (_) {}
+
+  // 2. Save to Supabase
+  try {
+    if (cid) {
+      await supabase.from('layout_cache').upsert({ cid, fp, positions: normalizedPositions, score }, { onConflict: 'cid' });
+    } else if (fp) {
+      await supabase.from('layout_cache').upsert({ fp, positions: normalizedPositions, score }, { onConflict: 'fp' });
+    }
   } catch (e) {
-    console.warn('[Layout] Cache save failed (layout_cache table may not exist):', e.message);
+    console.warn('[Layout] Cache save failed (layout_cache table may not exist or constraint mismatch):', e.message);
   }
 }
 
@@ -358,9 +437,9 @@ export function buildCircularLayout(entry, centroid) {
  * Stores winner in Supabase (fire-and-forget). Chemistry is never modified.
  */
 export async function selectBestLayout(entry, centroid) {
-  // 1. Supabase cache by CID
-  if (entry.cid) {
-    const cached = await loadCachedLayout(entry.cid);
+  // 1. Supabase/LocalStorage cache by CID or Fingerprint
+  if (entry.cid || entry.fp) {
+    const cached = await loadCachedLayout(entry.cid, entry.fp);
     if (cached) return denormalizePositions(cached, centroid);
   }
 
@@ -422,7 +501,7 @@ function _recentre(positions, centroid) {
 }
 
 function _persistAsync(entry, positions, score) {
-  if (!entry.cid) return;
+  if (!entry.cid && !entry.fp) return;
   const normalized = normalizePositions(positions, entry.bonds);
   saveCachedLayout(entry.cid, entry.fp || '', normalized, score);
 }
