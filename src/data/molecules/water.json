@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "water",
+  "name": "Water",
+  "atoms": [
+    { "sym": "O", "x": 0, "y": 0 },
+    { "sym": "H", "x": -55, "y": 35 },
+    { "sym": "H", "x": 55, "y": 35 }
+  ],
+  "bonds": [
+    { "a": 1, "b": 3, "order": 1 },
+    { "a": 2, "b": 3, "order": 1 }
+  ]
+}

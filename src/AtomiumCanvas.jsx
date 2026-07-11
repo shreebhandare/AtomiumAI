@@ -11,12 +11,14 @@ import FormulaInput from "./components/FormulaInput/FormulaInput";
 import ChatPanel from "./components/ChatAssistant/ChatPanel";
 import InspectorSidebar from "./components/Inspector/InspectorSidebar";
 import PeriodicTablePalette from "./components/PeriodicTable/PeriodicTablePalette";
+import MoleculeLibrary from "./components/MoleculeLibrary/MoleculeLibrary";
 import ElementTooltip from "./components/Tooltip/ElementTooltip";
+import { getTheme } from "./themes";
 import CanvasStage from "./components/Canvas/CanvasStage";
-import SimpleModeLegend from "./components/Legend/SimpleModeLegend";
-import ReactionsBar from "./components/ReactionsBar/ReactionsBar";
+import ResizeDivider from "./components/ResizeDivider";
 import { useLiveRef } from "./hooks/useLiveRef";
 import { useChatAssistant } from "./hooks/useChatAssistant";
+import { loadMolecule, findSafePosition, buildMoleculeAtomsBonds } from "./services/SpawnService/SpawnService";
 
 // ── Extracted modules (Phase 1 refactor — behavior-preserving split of the ──
 // ── former monolithic AtomiumCanvas.jsx into focused files) ──
@@ -115,7 +117,7 @@ export default function AtomiumCanvas() {
   });
   const handleSetTheme = (t) => {
     setThemeState(t);
-    try { localStorage.setItem("atomium-theme", t); } catch {}
+    try { localStorage.setItem("atomium-theme", t); } catch { }
   };
 
   // ── 3D Material Finish ──
@@ -124,41 +126,10 @@ export default function AtomiumCanvas() {
   });
   const handleSetMaterialFinish = (finish) => {
     setMaterialFinishState(finish);
-    try { localStorage.setItem("atomium-3d-finish", finish); } catch {}
+    try { localStorage.setItem("atomium-3d-finish", finish); } catch { }
   };
-  const themeVars = useMemo(() => {
-    const themes = {
-      light: {
-        bgApp: "#f8fafc", bgPanel: "#ffffff", bgCard: "#f8fafc", bgHover: "#f1f5f9", bgHeader: "#ffffff",
-        textPrimary: "#0f172a", textSecondary: "#475569", textMuted: "#94a3b8",
-        border: "#e2e8f0", borderAccent: "#cbd5e1",
-        btnBg: "#ffffff", btnHover: "#f1f5f9", btnBorder: "#cbd5e1", btnText: "#334155",
-        scrollTrack: "#f1f5f9", scrollThumb: "#cbd5e1", scrollThumbHover: "#94a3b8",
-      },
-      dawn: {
-        bgApp: "#faf6ef", bgPanel: "#f5ede0", bgCard: "#eedbc5", bgHover: "#e8d4be", bgHeader: "#f5ede0",
-        textPrimary: "#3b1f04", textSecondary: "#6d4c30", textMuted: "#9a7d5a",
-        border: "#e0c8a8", borderAccent: "#d4b48e",
-        btnBg: "#f5ede0", btnHover: "#e8d4be", btnBorder: "#d4b48e", btnText: "#3b1f04",
-        scrollTrack: "#eedbc5", scrollThumb: "#d4b48e", scrollThumbHover: "#b89870",
-      },
-      dark: {
-        bgApp: "#0b0f19", bgPanel: "#0f172a", bgCard: "#1e293b", bgHover: "#334155", bgHeader: "#0f172a",
-        textPrimary: "#f1f5f9", textSecondary: "#94a3b8", textMuted: "#64748b",
-        border: "#334155", borderAccent: "#475569",
-        btnBg: "#1e293b", btnHover: "#334155", btnBorder: "#475569", btnText: "#e2e8f0",
-        scrollTrack: "#1e293b", scrollThumb: "#475569", scrollThumbHover: "#64748b",
-      },
-      grey: {
-        bgApp: "#18181b", bgPanel: "#202023", bgCard: "#2d2d30", bgHover: "#3f3f46", bgHeader: "#202023",
-        textPrimary: "#f4f4f5", textSecondary: "#a1a1aa", textMuted: "#71717a",
-        border: "#3f3f46", borderAccent: "#52525b",
-        btnBg: "#2d2d30", btnHover: "#3f3f46", btnBorder: "#52525b", btnText: "#e4e4e7",
-        scrollTrack: "#2d2d30", scrollThumb: "#52525b", scrollThumbHover: "#71717a",
-      },
-    };
-    return themes[theme] || themes.light;
-  }, [theme]);
+  // Theme colors — edit in src/themes.js
+  const themeVars = useMemo(() => getTheme(theme), [theme]);
   const [tempK, setTempK] = useState(298);
   const [pressureAtm, setPressureAtm] = useState(1);
   const [selected, setSelected] = useState(null);
@@ -229,6 +200,28 @@ export default function AtomiumCanvas() {
   const equationModeRef = useLiveRef(equationMode);
 
   const [experimentHistory, setExperimentHistory] = useState([]);
+  const [bottomTab, setBottomTab] = useState("periodic");
+  const [isCollapsed, setIsCollapsed] = useState(true);
+
+  // ── Panel resize state ──
+  const [leftWidth, setLeftWidth] = useState(320);
+  const [rightWidth, setRightWidth] = useState(320);
+
+  const handleLeftResize = useCallback((delta) => {
+    setLeftWidth(prev => Math.min(560, Math.max(220, prev + delta)));
+  }, []);
+
+  const handleRightResize = useCallback((delta) => {
+    // Dragging divider left (negative delta) = grow right panel
+    setRightWidth(prev => Math.min(600, Math.max(220, prev - delta)));
+  }, []);
+
+  const [bottomTrayHeight, setBottomTrayHeight] = useState(370);
+
+  const handleBottomResize = useCallback((delta) => {
+    // Dragging divider up (negative delta) = grow tray height
+    setBottomTrayHeight(prev => Math.min(600, Math.max(370, prev - delta)));
+  }, []);
 
   const currentMolecules = useMemo(() => {
     const atoms = atomsRef.current || [];
@@ -316,7 +309,7 @@ export default function AtomiumCanvas() {
             return sym + subNum;
           });
       };
-      
+
       const formattedReactants = currentMolecules.map(formatFormulaUnicode).join(" + ");
       return { type: "building", text: `Current Reactants: ${formattedReactants}` };
     }
@@ -698,7 +691,7 @@ export default function AtomiumCanvas() {
           const groupAtomIds = new Set(groupAtoms.map(a => a.id));
 
           const K_SPRING = 0.32;  // spring stiffness
-          const DAMPING  = 0.70;  // velocity decay per frame
+          const DAMPING = 0.70;  // velocity decay per frame
 
           // Damp all non-dragged atoms in this molecule each frame
           for (const a of groupAtoms) {
@@ -819,9 +812,9 @@ export default function AtomiumCanvas() {
       // Determine highlight state
       const isHoveredAtomA = hoveredElementRef.current && !hoveredElementRef.current.isBond && hoveredElementRef.current.atomId === atomA.id;
       const isHoveredAtomB = hoveredElementRef.current && !hoveredElementRef.current.isBond && hoveredElementRef.current.atomId === atomB.id;
-      const isHoveredBond = hoveredElementRef.current && hoveredElementRef.current.isBond && 
+      const isHoveredBond = hoveredElementRef.current && hoveredElementRef.current.isBond &&
         (hoveredElementRef.current.bondKey === `${bd.a}-${bd.b}` || hoveredElementRef.current.bondKey === `${bd.b}-${bd.a}`);
-      
+
       const isHighlighted = isHoveredAtomA || isHoveredAtomB || isHoveredBond;
 
       const offsets = order === 1 ? [0] : order === 2 ? [-3, 3] : [-5, 0, 5];
@@ -1101,6 +1094,11 @@ export default function AtomiumCanvas() {
     const loop = (t) => {
       const dt = Math.min(0.05, (t - lastTime.current) / 1000);
       lastTime.current = t;
+      // Pause simulation physics and drawing if the page is currently hidden (not visible)
+      if (document.hidden) {
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
       // Upgrade #4.3.2: pause the 2D physics simulation while 3D mode is active.
       // Atoms/bonds stay frozen in place underneath the 3D viewer overlay rather
       // than continuing to drift, settle, or orbit while unseen — so switching
@@ -1210,11 +1208,11 @@ export default function AtomiumCanvas() {
           const a1 = atomsRef.current.find((a) => a.id === bd.a);
           const a2 = atomsRef.current.find((a) => a.id === bd.b);
           if (!a1 || !a2) continue;
-          
+
           const dx = a2.x - a1.x, dy = a2.y - a1.y;
           const l2 = dx * dx + dy * dy;
           if (l2 === 0) continue;
-          
+
           let t = ((x - a1.x) * dx + (y - a1.y) * dy) / l2;
           t = Math.max(0, Math.min(1, t));
           const px = a1.x + t * dx;
@@ -1225,7 +1223,7 @@ export default function AtomiumCanvas() {
             break;
           }
         }
-        
+
         if (hoveredBond) {
           const typeStr = hoveredBond.type === "ionic" ? "Ionic" : "Covalent";
           const order = Number(hoveredBond.order);
@@ -1437,6 +1435,7 @@ export default function AtomiumCanvas() {
     setCounts({ atoms: 0, bonds: 0 });
     setMode("setup");
     setReactionEquation("Awaiting reactants... Build your experiment and click Start.");
+    setVisualMode("bohr");
   };
 
   /**
@@ -1449,7 +1448,7 @@ export default function AtomiumCanvas() {
   const handleMoleculeReaction = async (result) => {
     const reactantAtomIds = new Set();
     const reactantBondIds = new Set();
-    
+
     result.molecules.forEach(m => {
       if (result.reactantFormulas.includes(m.formula)) {
         m.atomIds.forEach(id => reactantAtomIds.add(id));
@@ -1600,8 +1599,8 @@ export default function AtomiumCanvas() {
     if (subAtoms.length === 1) {
       const sym = subAtoms[0];
       const el = getElement(sym.charAt(0).toUpperCase() + sym.slice(1).toLowerCase())
-               || getElement(sym.toUpperCase())
-               || getElement(sym);
+        || getElement(sym.toUpperCase())
+        || getElement(sym);
       if (!el) return 0;
       const id = idCounter.current++;
       atomsRef.current.push({
@@ -1684,8 +1683,8 @@ export default function AtomiumCanvas() {
 
       subAtoms.forEach((sym, spawnedIdx) => {
         const el = getElement(sym.charAt(0).toUpperCase() + sym.slice(1).toLowerCase())
-                 || getElement(sym.toUpperCase())
-                 || getElement(sym);
+          || getElement(sym.toUpperCase())
+          || getElement(sym);
         if (!el) return;
 
         const angle = (spawnedIdx / count) * Math.PI * 2 - Math.PI / 2;
@@ -1796,7 +1795,7 @@ export default function AtomiumCanvas() {
       console.warn(`[Verified Spawn] Blueprint lookup failed for ${formula}, falling back to loose atoms:`, err.message);
       setPubchemStatus("not-found");
       setReactionEquation(`Could not verify "${canonicalSubFormula}" as a stable molecule. Spawning separate atoms.`);
-      
+
       const spacingRadius = Math.max(80, subAtoms.length * 28);
       for (let c = 0; c < coef; c++) {
         const existing = atomsRef.current;
@@ -1817,6 +1816,46 @@ export default function AtomiumCanvas() {
     bondsRef.current = bondsRef.current.filter((b) => b.a !== selected.id && b.b !== selected.id);
     setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
     setSelected(null);
+  };
+
+  // Remove all atoms belonging to a molecule by formula string (e.g. "2H", "O", "H2O")
+  const removeMoleculeByFormula = (formula) => {
+    const atoms = atomsRef.current;
+    // Case 1: spawned group with matching spawnGroupFormula
+    const matchedGroup = atoms.find((a) => a.spawnGroupFormula === formula);
+    if (matchedGroup) {
+      const groupId = matchedGroup.spawnGroupId;
+      const removedIds = new Set(atoms.filter((a) => a.spawnGroupId === groupId).map((a) => a.id));
+      atomsRef.current = atoms.filter((a) => !removedIds.has(a.id));
+      bondsRef.current = bondsRef.current.filter((b) => !removedIds.has(b.a) && !removedIds.has(b.b));
+      setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+      return;
+    }
+    // Case 2: loose individual atom (formula like "2H" or "H")
+    const countMatch = formula.match(/^(\d+)([A-Z][a-z]?)$/);
+    const singleMatch = formula.match(/^([A-Z][a-z]?)$/);
+    if (countMatch) {
+      let toRemove = parseInt(countMatch[1], 10);
+      const sym = countMatch[2];
+      const removedIds = new Set();
+      for (const a of atoms) {
+        if (a.sym === sym && !a.spawnGroupId && toRemove > 0) {
+          removedIds.add(a.id);
+          toRemove--;
+        }
+      }
+      atomsRef.current = atoms.filter((a) => !removedIds.has(a.id));
+      bondsRef.current = bondsRef.current.filter((b) => !removedIds.has(b.a) && !removedIds.has(b.b));
+      setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+    } else if (singleMatch) {
+      const sym = singleMatch[1];
+      const target = atoms.find((a) => a.sym === sym && !a.spawnGroupId);
+      if (target) {
+        atomsRef.current = atoms.filter((a) => a.id !== target.id);
+        bondsRef.current = bondsRef.current.filter((b) => b.a !== target.id && b.b !== target.id);
+        setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+      }
+    }
   };
 
   useEffect(() => {
@@ -1874,7 +1913,7 @@ export default function AtomiumCanvas() {
           registerReaction(aiEntry);
 
           // Persist to Supabase for future startups (best-effort, non-blocking)
-          persistReactionToSupabase(aiEntry).catch(() => {});
+          persistReactionToSupabase(aiEntry).catch(() => { });
 
           // Re-run the engine — it will now find the freshly registered entry
           const rerunResult = runReactionEngine(atoms, bondsRef.current);
@@ -2129,6 +2168,32 @@ export default function AtomiumCanvas() {
     }, 50);
   };
 
+  const handleLibrarySpawn = useCallback(async (moleculeIdOrData) => {
+    let molData;
+    if (typeof moleculeIdOrData === "string") {
+      molData = await loadMolecule(moleculeIdOrData);
+    } else {
+      molData = moleculeIdOrData;
+    }
+    if (!molData) return;
+    const center = findSafePosition(atomsRef.current);
+    const { atoms: newAtoms, bonds: newBonds } = buildMoleculeAtomsBonds(molData, center, idCounter);
+
+    // Register rest lengths for new bonds
+    newBonds.forEach((bd) => {
+      const atomA = newAtoms.find((a) => a.id === bd.a);
+      const atomB = newAtoms.find((a) => a.id === bd.b);
+      if (atomA && atomB) {
+        const dist = Math.hypot(atomB.x - atomA.x, atomB.y - atomA.y);
+        bondRestLengths.current.set(bd.id, dist);
+      }
+    });
+
+    atomsRef.current = [...atomsRef.current, ...newAtoms];
+    bondsRef.current = [...bondsRef.current, ...newBonds];
+    setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+  }, []);
+
   return (
     <div style={{
       display: "flex",
@@ -2243,12 +2308,10 @@ export default function AtomiumCanvas() {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         {/* LEFT PANEL */}
         <div style={{
-          width: 320,
+          width: leftWidth,
           background: themeVars.bgPanel,
           borderRight: `1px solid ${themeVars.border}`,
-          boxShadow: "4px 0 24px rgba(0, 0, 0, 0.08)",
           zIndex: 10,
-          padding: 16,
           display: "flex",
           flexDirection: "column",
           height: "100%",
@@ -2256,20 +2319,42 @@ export default function AtomiumCanvas() {
           flexShrink: 0,
           transition: "background 0.3s ease",
         }}>
-          
-          <FormulaInput
-            formulaInput={formulaInput} setFormulaInput={setFormulaInput}
-            spawnAtomsFromFormula={spawnAtomsFromFormula}
-          />
 
-          <div style={{ height: 1, background: themeVars.border, margin: "4px 0" }} />
-          <InspectorSidebar
-            selEl={selEl} selBondCount={selBondCount} selMolecule={selMolecule}
-            getAllPossibleReactions={getAllPossibleReactions}
-            removeSelected={removeSelected} lastReaction={lastReaction} counts={counts}
-            currentMolecules={currentMolecules} experimentHistory={experimentHistory}
-          />
+          {/* Left panel title bar — 48 px, matches AI panel & bottom tab bar */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            height: 48,
+            minHeight: 48,
+            padding: "0 16px",
+            borderBottom: `1px solid ${themeVars.border}`,
+            flexShrink: 0,
+          }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: themeVars.textPrimary, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: 0.2 }}>⚗️ Lab</span>
+          </div>
+
+          {/* Left panel scrollable content */}
+          <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column" }}>
+            <FormulaInput
+              formulaInput={formulaInput} setFormulaInput={setFormulaInput}
+              spawnAtomsFromFormula={spawnAtomsFromFormula}
+            />
+
+            <div style={{ height: 1, background: themeVars.border, margin: "4px 0" }} />
+            <InspectorSidebar
+              selEl={selEl} selBondCount={selBondCount} selMolecule={selMolecule}
+              getAllPossibleReactions={getAllPossibleReactions}
+              removeSelected={removeSelected} lastReaction={lastReaction} counts={counts}
+              currentMolecules={currentMolecules} experimentHistory={experimentHistory}
+              onRemoveExperiment={(id) => setExperimentHistory(prev => prev.filter(e => e.id !== id))}
+              displayedEquation={displayedEquation}
+              onRemoveMolecule={removeMoleculeByFormula}
+            />
+          </div>
         </div>
+
+        {/* LEFT ↔ CENTER RESIZE DIVIDER */}
+        <ResizeDivider direction="vertical" onDrag={handleLeftResize} />
 
         {/* CENTER COLUMN (Canvas + Reactions Bar + Periodic Table) */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -2277,7 +2362,7 @@ export default function AtomiumCanvas() {
           {/* CANVAS */}
           <CanvasStage
             diagnostics={diagnostics} pubchemStatus={pubchemStatus} counts={counts}
-            formulaInput={formulaInput} visualMode={visualMode}
+            formulaInput={formulaInput} visualMode={visualMode} setVisualMode={setVisualMode}
             viewer3dSdf={viewer3dSdf} viewer3dXyz={viewer3dXyz} viewer3dTitle={viewer3dTitle}
             canvasRef={canvasRef} handleMouseDown={handleMouseDown} handleMouseMove={handleMouseMove}
             handleMouseUp={handleMouseUp} handleMouseLeave={handleCanvasMouseLeave} handleWheel={handleWheel} handleDrop={handleDrop}
@@ -2288,22 +2373,127 @@ export default function AtomiumCanvas() {
             selected3DMoleculeIndex={selected3DMoleculeIndex}
             setSelected3DMoleculeIndex={setSelected3DMoleculeIndex}
             materialFinish={materialFinish}
+            mode={mode} startReaction={startReaction} clearAll={clearAll}
+            theme={theme}
           />
 
-          {/* REACTIONS BAR */}
-          <ReactionsBar equation={displayedEquation} />
+          {/* BOTTOM TRAY: Periodic Table | Molecule Library */}
+          <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
+            {/* Horizontal resize handle — drag to resize the tray height */}
+            {!isCollapsed && (
+              <ResizeDivider direction="horizontal" onDrag={handleBottomResize} />
+            )}
+            {/* Tab bar — 48 px, matches left panel & AI panel title bars */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              height: 48,
+              minHeight: 48,
+              borderTop: "1px solid var(--clb-border)",
+              background: "var(--clb-bg-panel)",
+              padding: "0 20px 0 16px",
+            }}
+              role="tablist" aria-label="Bottom panel"
+            >
+              <div style={{ display: "flex", gap: "4px" }}>
+                {["periodic", "molecules"].map((tab) => (
+                  <button
+                    key={tab}
+                    id={`bottom-tab-${tab}`}
+                    role="tab"
+                    aria-selected={bottomTab === tab}
+                    onClick={() => setBottomTab(tab)}
+                    style={{
+                      padding: "8px 16px",
+                      fontSize: "12px", fontWeight: "600",
+                      fontFamily: "inherit", border: "none",
+                      borderBottom: bottomTab === tab ? "2px solid #3b82f6" : "2px solid transparent",
+                      background: "transparent",
+                      color: bottomTab === tab ? "#3b82f6" : "var(--clb-text-muted)",
+                      cursor: "pointer", transition: "all 0.15s ease",
+                    }}
+                  >
+                    {tab === "periodic" ? "🧪 Elements" : "🔬 Molecules"}
+                  </button>
+                ))}
+              </div>
 
-          {/* PERIODIC TABLE */}
-          <PeriodicTablePalette setHoveredElement={setHoveredElement} onSelectElement={addElementFromSearch} />
+              {/* Spacer to push toggle control to the far right */}
+              <div style={{ flex: 1 }} />
+
+              {/* Right-aligned toggle expand/collapse button */}
+              <button
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                aria-expanded={!isCollapsed}
+                aria-controls="bottom-tray-collapsible"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--clb-text-secondary)",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "6px 0",
+                  fontFamily: "inherit",
+                  outline: "none",
+                  transition: "color 0.15s ease",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--clb-text-primary)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--clb-text-secondary)"; }}
+                onFocus={(e) => { e.currentTarget.style.color = "var(--clb-text-primary)"; }}
+                onBlur={(e) => { e.currentTarget.style.color = "var(--clb-text-secondary)"; }}
+              >
+                {isCollapsed ? "Open ▲" : "Close ▼"}
+              </button>
+            </div>
+
+            {/* Collapsible Tray Content Area */}
+            <div
+              id="bottom-tray-collapsible"
+              style={{
+                height: isCollapsed ? 0 : bottomTrayHeight,
+                opacity: isCollapsed ? 0 : 1,
+                overflowY: "auto",
+                overflowX: "auto",
+                transition: "height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-in-out, padding 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+                padding: isCollapsed ? "0px 24px" : "14px 24px",
+                background: "var(--clb-bg-panel)",
+                borderTop: isCollapsed ? "none" : "1px solid var(--clb-border)",
+              }}
+            >
+              {bottomTab === "periodic" && (
+                <PeriodicTablePalette setHoveredElement={setHoveredElement} onSelectElement={addElementFromSearch} />
+              )}
+              {bottomTab === "molecules" && (
+                <MoleculeLibrary onSpawn={handleLibrarySpawn} />
+              )}
+            </div>
+          </div>
         </div>
 
+        {/* CENTER ↔ RIGHT RESIZE DIVIDER */}
+        <ResizeDivider direction="vertical" onDrag={handleRightResize} />
+
         {/* RIGHT PANEL — AI CHAT */}
-        <ChatPanel
-          chatExpanded={chatExpanded} setChatExpanded={setChatExpanded}
-          chatMessages={chatMessages} chatInput={chatInput} setChatInput={setChatInput}
-          sendChatMessage={sendChatMessage} useAI={useAI}
-          isWaitingForAI={isWaitingForAI}
-        />
+        <div style={{
+          width: rightWidth,
+          height: "100%",
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          borderLeft: `1px solid ${themeVars.border}`,
+        }}>
+          <ChatPanel
+            chatExpanded={chatExpanded} setChatExpanded={setChatExpanded}
+            chatMessages={chatMessages} chatInput={chatInput} setChatInput={setChatInput}
+            sendChatMessage={sendChatMessage} useAI={useAI}
+            isWaitingForAI={isWaitingForAI}
+          />
+        </div>
       </div>
 
       <ElementTooltip hoveredElement={hoveredElement} />

@@ -1,14 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Molecule3DViewer from "../../Molecule3DViewer";
-import SimpleModeLegend from "../Legend/SimpleModeLegend";
 import ReactionToastStack from "../ReactionToast/ReactionToastStack";
+import ViewModeTabs from "./ViewModeTabs";
+import CanvasBottomBar from "./CanvasBottomBar";
 
 // The reaction canvas itself: status banners (active-reaction / PubChem lookup),
 // the empty-state placeholder, the 3D-mode overlay, the actual <canvas> element
 // (physics rendering lives in AtomiumCanvas — this just hosts the ref + handlers),
 // and the zoom controls.
 export default function CanvasStage({
-  diagnostics, pubchemStatus, counts, formulaInput, visualMode,
+  diagnostics, pubchemStatus, counts, formulaInput, visualMode, setVisualMode,
   viewer3dSdf, viewer3dXyz, viewer3dTitle,
   canvasRef, handleMouseDown, handleMouseMove, handleMouseUp, handleMouseLeave, handleWheel, handleDrop,
   zoom, setZoom, fitAll, resetView,
@@ -16,6 +17,8 @@ export default function CanvasStage({
   orbitSpeed, setOrbitSpeed,
   distinctMolecules, selected3DMoleculeIndex, setSelected3DMoleculeIndex,
   materialFinish,
+  mode, startReaction, clearAll,
+  theme,
 }) {
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -31,9 +34,88 @@ export default function CanvasStage({
     };
   }, [canvasRef, handleWheel]);
 
+  // Touch & Pinch-to-zoom support for tablet/mobile viewports
+  const zoomRef = useRef(zoom);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let startTouchDist = 0;
+    let startTouchZoom = 1;
+
+    const getDistance = (t1, t2) => {
+      return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    };
+
+    const handleTouchStart = (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        handleMouseDown({
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+          preventDefault: () => {}
+        });
+      } else if (e.touches.length === 2) {
+        startTouchDist = getDistance(e.touches[0], e.touches[1]);
+        startTouchZoom = zoomRef.current;
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        handleMouseMove({
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+          preventDefault: () => {}
+        });
+      } else if (e.touches.length === 2) {
+        const dist = getDistance(e.touches[0], e.touches[1]);
+        if (startTouchDist > 0) {
+          const ratio = dist / startTouchDist;
+          const targetZoom = Math.max(0.4, Math.min(2.2, startTouchZoom * ratio));
+          setZoom(targetZoom);
+        }
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      e.preventDefault();
+      handleMouseUp();
+      startTouchDist = 0;
+    };
+
+    canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+    canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", handleTouchEnd, { passive: false });
+
+    return () => {
+      canvas.removeEventListener("touchstart", handleTouchStart);
+      canvas.removeEventListener("touchmove", handleTouchMove);
+      canvas.removeEventListener("touchend", handleTouchEnd);
+      canvas.removeEventListener("touchcancel", handleTouchEnd);
+    };
+  }, [canvasRef, handleMouseDown, handleMouseMove, handleMouseUp, setZoom]);
+
   return (
-    <>
-          <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "var(--clb-bg-canvas)", transition: "background 0.3s ease" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <ViewModeTabs
+        visualMode={visualMode}
+        setVisualMode={setVisualMode}
+        mode={mode}
+        startReaction={startReaction}
+        clearAll={clearAll}
+        fitAll={fitAll}
+        resetView={resetView}
+      />
+      <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "var(--clb-bg-canvas)", transition: "background 0.3s ease" }}>
             
             {/* Active reaction / pulling status */}
             {diagnostics.length > 0 && (
@@ -104,6 +186,7 @@ export default function CanvasStage({
                   selected3DMoleculeIndex={selected3DMoleculeIndex}
                   setSelected3DMoleculeIndex={setSelected3DMoleculeIndex}
                   materialFinish={materialFinish}
+                  theme={theme}
                 />
               </div>
             )}
@@ -117,37 +200,14 @@ export default function CanvasStage({
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
             />
-            {visualMode === "simple" && <SimpleModeLegend />}
-            {/* Bohr mode orbit-speed control overlay */}
-            {visualMode === "bohr" && (
-              <div style={{
-                position: "absolute", bottom: 14, left: 14, zIndex: 20,
-                background: "var(--clb-bg-panel, rgba(255,255,255,0.85))",
-                backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-                border: "1px solid var(--clb-border, #e2e8f0)",
-                borderRadius: 12, padding: "10px 16px",
-                boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
-                display: "flex", flexDirection: "column", gap: 6,
-                transition: "background 0.3s ease, border-color 0.3s ease",
-                fontFamily: "'Space Grotesk', sans-serif",
-                minWidth: 170,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--clb-text-secondary, #64748b)", letterSpacing: 0.5 }}>⚡ ORBIT SPEED</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--clb-text-primary, #0f172a)", fontFamily: "'Space Mono', monospace" }}>{orbitSpeed.toFixed(1)}×</span>
-                </div>
-                <input
-                  type="range" min="0.1" max="3" step="0.1"
-                  value={orbitSpeed}
-                  onChange={(e) => setOrbitSpeed(parseFloat(e.target.value))}
-                  style={{ width: "100%", accentColor: "#2563eb", cursor: "pointer" }}
-                />
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "var(--clb-text-muted, #94a3b8)" }}>
-                  <span>0.1×</span>
-                  <span>3.0×</span>
-                </div>
-              </div>
-            )}
+            {/* Mode-specific bottom bar: orbit speed (bohr) or bond legend (simple) */}
+            <CanvasBottomBar
+              visualMode={visualMode}
+              orbitSpeed={orbitSpeed}
+              setOrbitSpeed={setOrbitSpeed}
+              fitAll={fitAll}
+              resetView={resetView}
+            />
             <div style={{ position: "absolute", bottom: 12, right: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
               <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Space Mono', monospace", fontWeight: 600 }}>{Math.round(zoom * 100)}%</span>
               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -157,7 +217,7 @@ export default function CanvasStage({
                 <button className="clb-btn" style={{ width: 32, height: 32, padding: 0, borderRadius: 6, fontSize: 12 }} onClick={fitAll} title="Fit all molecules in view">⛶</button>
               </div>
             </div>
-          </div>
-    </>
+      </div>
+    </div>
   );
 }

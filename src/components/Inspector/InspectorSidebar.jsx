@@ -1,4 +1,5 @@
 import { formatFormulaUnicode } from "../../chemistry/equationBuilder";
+import ReactionsBar from "../ReactionsBar/ReactionsBar";
 
 function getHazardClassification(formulaStr) {
   if (!formulaStr) return "Unknown";
@@ -65,6 +66,9 @@ export default function InspectorSidebar({
   selEl, selBondCount, selMolecule,
   removeSelected, counts,
   currentMolecules = [], experimentHistory = [],
+  onRemoveExperiment,
+  displayedEquation,
+  onRemoveMolecule,
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
@@ -84,37 +88,8 @@ export default function InspectorSidebar({
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--clb-text-secondary)", letterSpacing: 1.2 }}>LAB NOTEBOOK</div>
         </div>
 
-        {/* Current Experiment */}
-        <div style={{
-          background: "var(--clb-bg-panel)",
-          border: "1px solid var(--clb-border)",
-          borderRadius: 12,
-          padding: 14,
-          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.03)"
-        }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--clb-text-secondary)", letterSpacing: 1, marginBottom: 10 }}>CURRENT EXPERIMENT</div>
-          {currentMolecules.length === 0 ? (
-            <div style={{ fontSize: 12, color: "var(--clb-text-muted)", fontStyle: "italic" }}>Empty canvas (add atoms or molecules)</div>
-          ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {currentMolecules.map((mol, idx) => (
-                <div key={idx} style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  fontFamily: "'Space Mono', monospace",
-                  color: "var(--clb-text-primary)",
-                  background: "var(--clb-bg-canvas)",
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  border: "1px solid var(--clb-border)",
-                  boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
-                }}>
-                  {formatFormulaUnicode(mol)}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Reaction state/equation bar — now includes CURRENT EXPERIMENT heading + molecule badges */}
+        <ReactionsBar equation={displayedEquation} currentMolecules={currentMolecules} onRemoveMolecule={onRemoveMolecule} />
 
         {/* Experiment History */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -145,7 +120,27 @@ export default function InspectorSidebar({
                   flexDirection: "column",
                   gap: 10
                 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: "#2563eb" }}>Experiment #{exp.number}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: "#2563eb" }}>Experiment #{exp.number}</div>
+                    <button
+                      onClick={() => onRemoveExperiment?.(exp.id)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--clb-text-muted)",
+                        cursor: "pointer",
+                        fontSize: "16px",
+                        lineHeight: 1,
+                        padding: "0 4px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                      title="Remove experiment from log"
+                    >
+                      ×
+                    </button>
+                  </div>
                   
                   {/* Reactants */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

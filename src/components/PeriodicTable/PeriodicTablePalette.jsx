@@ -13,7 +13,6 @@ import { ELEMENTS, getGroupStyles } from "../../data/elements";
 // live in AtomiumCanvas; this component just reports the selection up.
 export default function PeriodicTablePalette({ setHoveredElement, onSelectElement }) {
   const [search, setSearch] = useState("");
-  const [isCollapsed, setIsCollapsed] = useState(true);
 
   const query = search.trim().toLowerCase();
   const matchedSyms = useMemo(() => {
@@ -42,83 +41,45 @@ export default function PeriodicTablePalette({ setHoveredElement, onSelectElemen
 
   return (
     <div style={{
-      background: "var(--clb-bg-canvas)",
-      flexShrink: 0,
+      background: "var(--clb-bg-panel)",
       display: "flex",
       flexDirection: "column",
       width: "100%",
       transition: "background 0.3s ease, border-color 0.3s ease",
     }}>
-      {/* Clickable Header — toggles expand/collapse */}
-      <div
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "12px 24px",
-          borderTop: "1px solid var(--clb-border)",
-          borderBottom: "1px solid var(--clb-border)",
-          background: "var(--clb-bg-panel)",
-          cursor: "pointer",
-          userSelect: "none",
-          transition: "background 0.15s ease",
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--clb-bg-hover)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "var(--clb-bg-panel)"; }}
-        title={isCollapsed ? "Expand Periodic Table" : "Collapse Periodic Table"}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "16px" }}>🧪</span>
-          <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--clb-text-primary)" }}>Periodic Table</span>
-        </div>
-        <span style={{ fontSize: 11, color: "var(--clb-text-secondary)", fontWeight: 600, letterSpacing: 0.5 }}>
-          {isCollapsed ? "▼" : "▲"}
-        </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, maxWidth: 290 }}>
+        <span style={{ fontSize: 13 }}>🔎</span>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
+          placeholder="Search elements (e.g. Fe, Iron)..."
+          title="Type to highlight matches; press Enter to add the top match to the canvas"
+          style={{
+            flex: 1,
+            fontSize: 12,
+            padding: "5px 9px",
+            borderRadius: 8,
+            border: "1px solid var(--clb-border-accent)",
+            background: "var(--clb-bg-panel)",
+            color: "var(--clb-text-primary)",
+            outline: "none",
+            fontFamily: "inherit",
+          }}
+        />
+        {search && (
+          <button
+            className="clb-btn"
+            style={{ padding: "4px 8px", fontSize: 10.5 }}
+            onClick={(e) => { e.stopPropagation(); setSearch(""); }}
+            title="Clear search"
+          >
+            ✕
+          </button>
+        )}
       </div>
-
-      {/* Expandable/Collapsible Content Area */}
-      <div style={{
-        maxHeight: isCollapsed ? "0px" : "600px",
-        opacity: isCollapsed ? 0 : 1,
-        overflow: "hidden",
-        overflowX: "auto",
-        transition: "max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-in-out, padding 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-        padding: isCollapsed ? "0px 24px" : "14px 24px",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, maxWidth: 290 }}>
-          <span style={{ fontSize: 13 }}>🔎</span>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="Search elements (e.g. Fe, Iron)..."
-            title="Type to highlight matches; press Enter to add the top match to the canvas"
-            style={{
-              flex: 1,
-              fontSize: 12,
-              padding: "5px 9px",
-              borderRadius: 8,
-              border: "1px solid var(--clb-border-accent)",
-              background: "var(--clb-bg-panel)",
-              color: "var(--clb-text-primary)",
-              outline: "none",
-              fontFamily: "inherit",
-            }}
-          />
-          {search && (
-            <button
-              className="clb-btn"
-              style={{ padding: "4px 8px", fontSize: 10.5 }}
-              onClick={(e) => { e.stopPropagation(); setSearch(""); }}
-              title="Clear search"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-        {/* 90% scaled grid — reclaims ~10% vertical space */}
-        <div style={{ transform: "scale(0.9)", transformOrigin: "top left", width: "111.11%" }}>
+      {/* 90% scaled grid — reclaims ~10% vertical space */}
+      <div style={{ transform: "scale(0.9)", transformOrigin: "top left", width: "111.11%" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(18, minmax(32px, 1fr))", gridTemplateRows: "repeat(10, auto)", gap: "3px", minWidth: "600px", paddingBottom: 4 }}>
           {ELEMENTS.map((el) => {
             const groupStyle = getGroupStyles(el.group);
@@ -165,7 +126,6 @@ export default function PeriodicTablePalette({ setHoveredElement, onSelectElemen
               </div>
             );
           })}
-        </div>
         </div>
       </div>
     </div>

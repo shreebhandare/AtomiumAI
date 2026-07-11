@@ -22,6 +22,7 @@
  *   • Correct cleanup to prevent WebGL context leak on unmount
  */
 import { useState, useRef, useEffect, useCallback } from "react";
+import { getTheme } from "./themes";
 
 // ─── CPK Element lookup table ────────────────────────────────────────────────
 const ELEMENT_INFO = {
@@ -85,6 +86,7 @@ export default function Molecule3DViewer({
   modelData, format, sdfData, molData, xyzData, pdbData, title,
   distinctMolecules = [], selected3DMoleculeIndex = 0, setSelected3DMoleculeIndex,
   materialFinish = "glossy",
+  theme = "dark",
 }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);   // $3Dmol viewer instance
@@ -97,6 +99,13 @@ export default function Molecule3DViewer({
   const [currentStyle, setCurrentStyle] = useState("ballAndStick");
   const [showLabels, setShowLabels] = useState(false);
   const [selectedAtom, setSelectedAtom] = useState(null);
+  const [autoRotate, setAutoRotate] = useState(true);
+  const [showHint, setShowHint] = useState(true);
+
+  const autoRotateRef = useRef(false);
+  const rotateRafRef = useRef(null);
+  const idleTimerRef = useRef(null);
+  const userInteractedRef = useRef(false);
 
   // Resolve which data + format to use (SDF preferred)
   const { activeData, activeFormat } = (() => {
@@ -117,6 +126,21 @@ export default function Molecule3DViewer({
     });
   }, []);
 
+  // ── Read the canvas background from the CSS variable.
+  // --clb-bg-canvas is set as an inline style on the AtomiumCanvas root <div>,
+  // NOT on <html>/<body>, so we read it from the container element (which lives
+  // inside that styled tree). We also keep APP_THEMES as a synchronous fallback
+  // so the very first render (before the DOM is painted) still gets the right color.
+  const readCanvasBg = useCallback(() => {
+    if (containerRef.current) {
+      const val = getComputedStyle(containerRef.current)
+        .getPropertyValue("--clb-bg-canvas").trim();
+      if (val) return val;
+    }
+    // Fallback: resolve directly from the theme token map (no DOM required)
+    return getTheme(theme).bgApp || "#070a11";
+  }, [theme]);
+
   // ── Initialize viewer once ───────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
@@ -128,8 +152,13 @@ export default function Molecule3DViewer({
     }
 
     try {
+      // Use the theme token directly for the initial background so the 3D
+      // viewer always matches the active theme on first mount — even before
+      // the browser has had a chance to propagate the inherited CSS variable.
+      const canvasBg = getTheme(theme).bgApp || "#070a11";
+
       viewerRef.current = window.$3Dmol.createViewer(containerRef.current, {
-        backgroundColor: "white",
+        backgroundColor: canvasBg,
         antialias: true,
         disableFog: true,
         cartoonQuality: 5,
@@ -157,6 +186,21 @@ export default function Molecule3DViewer({
       }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Sync viewer background whenever the theme prop changes ───────────────
+  // This replaces any MutationObserver approach: because the theme lives in
+  // React state (AtomiumCanvas) and is passed down as a prop, a simple
+  // useEffect dependency is the correct and reliable mechanism.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    // Prefer the computed CSS variable (available after first paint) so that
+    // any future --clb-bg-canvas customization is automatically picked up;
+    // fall back to the JS theme map if the variable hasn't propagated yet.
+    const bg = readCanvasBg();
+    viewer.setBackgroundColor(bg);
+    scheduleRender();
+  }, [theme, readCanvasBg, scheduleRender]);
 
   // ── Load / reload model data ─────────────────────────────────────────────
   useEffect(() => {
@@ -250,15 +294,69 @@ export default function Molecule3DViewer({
       atoms.forEach((atom) => {
         viewer.addLabel(atom.elem || "?", {
           position: atom,
-          backgroundOpacity: 0,
-          fontColor: "#334155",
-          fontSize: 9,
+          font: "'Space Grotesk', sans-serif",
+          fontSize: 14,
+          fontColor: "#ffffff",
+          backgroundColor: "#0f172a",
+          backgroundOpacity: 0.85,
+          borderColor: "#334155",
+          borderWidth: 1,
           inFront: true,
         });
       });
     }
     scheduleRender();
   }, [currentStyle, showLabels, materialFinish, scheduleRender]);
+
+  // ── Auto-rotation with idle-timer ───────────────────────────────────────
+  useEffect(() => {
+    autoRotateRef.current = autoRotate;
+    if (autoRotate) {
+      // Start the rotation loop
+      const rotate = () => {
+        if (!autoRotateRef.current || !viewerRef.current) return;
+        viewerRef.current.rotate(2.2, "y");
+        scheduleRender();
+        rotateRafRef.current = requestAnimationFrame(rotate);
+      };
+      rotateRafRef.current = requestAnimationFrame(rotate);
+    } else {
+      if (rotateRafRef.current) {
+        cancelAnimationFrame(rotateRafRef.current);
+        rotateRafRef.current = null;
+      }
+    }
+    return () => {
+      if (rotateRafRef.current) {
+        cancelAnimationFrame(rotateRafRef.current);
+        rotateRafRef.current = null;
+      }
+    };
+  }, [autoRotate, scheduleRender]);
+
+  // Pause auto-rotate on user interaction, resume after 8s idle
+  const handleUserInteraction = useCallback(() => {
+    if (autoRotateRef.current) {
+      autoRotateRef.current = false;
+      if (rotateRafRef.current) {
+        cancelAnimationFrame(rotateRafRef.current);
+        rotateRafRef.current = null;
+      }
+    }
+    clearTimeout(idleTimerRef.current);
+    if (autoRotate) {
+      idleTimerRef.current = setTimeout(() => {
+        autoRotateRef.current = true;
+        const resume = () => {
+          if (!autoRotateRef.current || !viewerRef.current) return;
+          viewerRef.current.rotate(1.4, "y");
+          scheduleRender();
+          rotateRafRef.current = requestAnimationFrame(resume);
+        };
+        rotateRafRef.current = requestAnimationFrame(resume);
+      }, 8000);
+    }
+  }, [autoRotate, scheduleRender]);
 
   // ── Apply glossy/matte CSS filter to the container ──────────────────────
   useEffect(() => {
@@ -289,15 +387,15 @@ export default function Molecule3DViewer({
 
   // ─── Render ───────────────────────────────────────────────────────────────
   const btnBase = {
-    border: "1px solid #e2e8f0",
+    border: "1px solid var(--clb-border)",
     borderRadius: 6,
-    background: "#ffffff",
-    color: "#475569",
+    background: "var(--clb-bg-panel)",
+    color: "var(--clb-text-secondary)",
     cursor: "pointer",
     fontFamily: "'Space Grotesk', sans-serif",
     fontWeight: 600,
     fontSize: 11,
-    transition: "background 0.15s",
+    transition: "background 0.15s, border-color 0.15s, color 0.15s",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -306,8 +404,8 @@ export default function Molecule3DViewer({
   return (
     <div style={{
       display: "flex", flexDirection: "column",
-      background: "#ffffff", width: "100%", height: "100%",
-      borderRadius: 16, border: "1px solid #e2e8f0",
+      background: "var(--clb-bg-panel)", width: "100%", height: "100%",
+      borderRadius: 16, border: "1px solid var(--clb-border)",
       boxShadow: "0 4px 24px rgba(0,0,0,0.04)",
       overflow: "hidden", position: "relative",
     }}>
@@ -315,14 +413,14 @@ export default function Molecule3DViewer({
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "9px 14px", background: "#f8fafc",
-        borderBottom: "1px solid #f1f5f9", flexShrink: 0,
+        padding: "9px 14px", background: "var(--clb-bg-canvas)",
+        borderBottom: "1px solid var(--clb-border)", flexShrink: 0,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <span style={{ fontSize: 15 }}>🧊</span>
             <span style={{
-              fontSize: 12, fontWeight: 700, color: "#1e293b",
+              fontSize: 12, fontWeight: 700, color: "var(--clb-text-primary)",
               fontFamily: "'Space Grotesk', sans-serif", letterSpacing: 0.4,
               textTransform: "uppercase",
             }}>
@@ -333,7 +431,7 @@ export default function Molecule3DViewer({
           {/* Molecule Selection Dropdown */}
           {distinctMolecules.length > 1 && setSelected3DMoleculeIndex && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: 0.5 }}>SELECT:</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "var(--clb-text-muted)", letterSpacing: 0.5 }}>SELECT:</span>
               <select
                 value={selected3DMoleculeIndex}
                 onChange={(e) => setSelected3DMoleculeIndex(parseInt(e.target.value))}
@@ -343,7 +441,7 @@ export default function Molecule3DViewer({
                   fontSize: 11.5,
                   color: "#2563eb",
                   borderColor: "#dbeafe",
-                  background: "#eff6ff url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%232563eb' viewBox='0 0 16 16'><path d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/></svg>\") no-repeat right 8px center",
+                  background: "var(--clb-bg-canvas)",
                   appearance: "none",
                   WebkitAppearance: "none",
                   height: 28,
@@ -364,7 +462,7 @@ export default function Molecule3DViewer({
         {activeFormat && (
           <span style={{
             fontSize: 9, fontWeight: 800, color: "#2563eb",
-            background: "#eff6ff", padding: "2px 7px",
+            background: "var(--clb-bg-canvas)", padding: "2px 7px",
             borderRadius: 6, textTransform: "uppercase", letterSpacing: 0.5,
           }}>
             {activeFormat}
@@ -378,7 +476,8 @@ export default function Molecule3DViewer({
         {/* Loading */}
         {loading && (
           <div style={{
-            position: "absolute", inset: 0, background: "rgba(255,255,255,0.88)",
+            position: "absolute", inset: 0, background: "var(--clb-bg-panel)",
+            opacity: 0.92,
             display: "flex", flexDirection: "column", alignItems: "center",
             justifyContent: "center", zIndex: 20, gap: 12,
           }}>
@@ -396,7 +495,7 @@ export default function Molecule3DViewer({
         {/* Error */}
         {error && !loading && (
           <div style={{
-            position: "absolute", inset: 0, background: "#fef2f2",
+            position: "absolute", inset: 0, background: "var(--clb-bg-panel)",
             display: "flex", flexDirection: "column", alignItems: "center",
             justifyContent: "center", zIndex: 20, gap: 6, padding: 20, textAlign: "center",
           }}>
@@ -416,15 +515,37 @@ export default function Molecule3DViewer({
             viewerRef.current.zoom(factor);
             scheduleRender();
           }}
+          onMouseDown={handleUserInteraction}
+          onTouchStart={handleUserInteraction}
           style={{ width: "100%", height: "100%", cursor: "grab" }}
         />
+
+        {/* First-use interaction hint */}
+        {showHint && !loading && !error && (
+          <div
+            onClick={() => setShowHint(false)}
+            style={{
+              position: "absolute", bottom: 12, left: "50%",
+              transform: "translateX(-50%)",
+              background: "rgba(15,23,42,0.82)", color: "#f1f5f9",
+              backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+              borderRadius: "20px", padding: "6px 16px",
+              fontSize: "11.5px", fontWeight: "500",
+              whiteSpace: "nowrap", cursor: "pointer", zIndex: 15,
+              userSelect: "none",
+              animation: "fadeInUp 0.4s ease",
+            }}
+          >
+            🖱 Drag to rotate · Scroll to zoom · Click to dismiss
+          </div>
+        )}
 
         {/* Selected Atom Info Panel */}
         {selectedAtom && (
           <div style={{
             position: "absolute", top: 10, right: 10, zIndex: 10,
-            background: "rgba(255,255,255,0.96)", backdropFilter: "blur(10px)",
-            border: "1px solid #e2e8f0", borderRadius: 12, padding: "10px 12px",
+            background: "var(--clb-bg-panel)", backdropFilter: "blur(10px)",
+            border: "1px solid var(--clb-border)", borderRadius: 12, padding: "10px 12px",
             width: 162, boxShadow: "0 8px 20px rgba(0,0,0,0.07)",
             display: "flex", flexDirection: "column", gap: 6,
           }}>
@@ -450,14 +571,14 @@ export default function Molecule3DViewer({
                 {selectedAtom.elem}
               </div>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--clb-text-primary)" }}>
                   {selectedAtom.name}
                 </div>
                 <div style={{ fontSize: 9, color: "#64748b" }}>Z = {selectedAtom.number}</div>
               </div>
             </div>
 
-            <div style={{ height: 1, background: "#f1f5f9" }} />
+            <div style={{ height: 1, background: "var(--clb-border)" }} />
 
             <div style={{
               display: "grid", gridTemplateColumns: "1fr 1fr",
@@ -478,13 +599,13 @@ export default function Molecule3DViewer({
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "7px 12px", background: "#f8fafc",
-        borderTop: "1px solid #f1f5f9", flexShrink: 0, gap: 8, flexWrap: "wrap",
+        padding: "7px 12px", background: "var(--clb-bg-canvas)",
+        borderTop: "1px solid var(--clb-border)", flexShrink: 0, gap: 8, flexWrap: "wrap",
       }}>
 
         {/* Style selector */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: 0.6 }}>STYLE</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--clb-text-muted)", letterSpacing: 0.6 }}>STYLE</span>
           <select
             value={currentStyle}
             onChange={(e) => setCurrentStyle(e.target.value)}
@@ -506,6 +627,7 @@ export default function Molecule3DViewer({
             { label: "+", title: "Zoom In", action: handleZoomIn, w: 28 },
             { label: "−", title: "Zoom Out", action: handleZoomOut, w: 28 },
             { label: "⌂", title: "Reset View", action: handleReset, w: 28, fs: 14 },
+            { label: "↻ AUTO", title: "Toggle auto-rotation (pauses on interaction, resumes after 8s)", action: () => setAutoRotate(v => !v), active: autoRotate, px: 8 },
             { label: "LABELS", title: "Toggle Atom Labels", action: () => setShowLabels(v => !v), active: showLabels, px: 8 },
             { label: "📸", title: "Screenshot", action: handleScreenshot, w: 28, fs: 13 },
           ].map(({ label, title, action, active, w, px, fs }) => (
@@ -518,9 +640,9 @@ export default function Molecule3DViewer({
                 width: w, height: 28,
                 padding: px ? `0 ${px}px` : 0,
                 fontSize: fs || 11,
-                background: active ? "#e0e7ff" : "#ffffff",
-                borderColor: active ? "#6366f1" : "#e2e8f0",
-                color: active ? "#4f46e5" : "#475569",
+                background: active ? "var(--clb-bg-canvas)" : "var(--clb-bg-panel)",
+                borderColor: active ? "#6366f1" : "var(--clb-border)",
+                color: active ? "#4f46e5" : "var(--clb-text-secondary)",
               }}
             >
               {label}

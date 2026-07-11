@@ -29,7 +29,7 @@ export default function HeaderBar({
         alignItems: "center",
         justifyContent: "space-between",
         padding: "10px 20px",
-        background: "var(--clb-bg-header)",
+        background: "var(--clb-bg-panel)",
         borderBottom: "1px solid var(--clb-border)",
         flexShrink: 0,
         boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
@@ -64,125 +64,32 @@ export default function HeaderBar({
           </span>
         </div>
       </div>
-
-      {/* Central Visualization Tabs (Moved from Canvas Area for Maximized Space) */}
-      <div style={{
-        display: "flex",
-        background: "var(--clb-bg-canvas)",
-        padding: 3,
-        borderRadius: 10,
-        border: "1px solid var(--clb-border)",
-        gap: 2,
-        transition: "background 0.3s ease, border-color 0.3s ease",
-      }}>
-        {[
-          { id: "bohr", label: "Bohr Model" },
-          { id: "simple", label: "Simple 2D" },
-          { id: "3d", label: "3D Model" }
-        ].map((tab) => {
-          const isActive = visualMode === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setVisualMode(tab.id)}
-              style={{
-                padding: "6px 14px",
-                fontSize: "12.5px",
-                fontWeight: isActive ? 700 : 500,
-                color: isActive ? "#2563eb" : "var(--clb-text-secondary)",
-                background: isActive ? "var(--clb-bg-panel)" : "transparent",
-                border: "none",
-                borderRadius: 7,
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                fontFamily: "inherit",
-                boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-              }}
-              onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--clb-bg-hover)"; }}
-              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Center/Right Control buttons */}
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <button
-          className="clb-btn"
-          onClick={clearAll}
-          style={{
-            padding: "8px 14px",
-            fontSize: "13px",
-            fontWeight: 600,
-          }}
-          title="Clear all atoms and molecules from the canvas"
-        >
-          🗑 Clear
-        </button>
-
-        {mode === "setup" ? (
-          <button
-            className="clb-btn"
-            style={{
-              background: "#16a34a",
-              borderColor: "#16a34a",
-              color: "#fff",
-              padding: "8px 14px",
-              fontSize: "13px",
-              fontWeight: 600,
-            }}
-            onClick={startReaction}
-          >
-            ▶ Start
-          </button>
-        ) : (
-          <button
-            className="clb-btn"
-            style={{
-              background: "#dc2626",
-              borderColor: "#dc2626",
-              color: "#fff",
-              padding: "8px 14px",
-              fontSize: "13px",
-              fontWeight: 600,
-            }}
-            onClick={() => setMode("setup")}
-          >
-            ⏹ Stop
-          </button>
-        )}
-
-        <div style={{ width: 1, height: 20, background: "var(--clb-border)", margin: "0 4px" }} />
-
-        {/* Settings button */}
-        <button
-          className="clb-btn"
-          onClick={() => setSettingsOpen(true)}
-          style={{
-            padding: "8px 12px",
-            fontSize: "18px",
-            background: "transparent",
-            borderColor: "transparent",
-            boxShadow: "none",
-            color: "var(--clb-text-secondary)",
-            transition: "transform 0.2s ease, color 0.2s ease",
-            cursor: "pointer",
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.color = "var(--clb-text-primary)";
-            e.currentTarget.style.transform = "rotate(30deg)";
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.color = "var(--clb-text-secondary)";
-            e.currentTarget.style.transform = "rotate(0deg)";
-          }}
-          title="Settings"
-        >
-          ⚙
-        </button>
-      </div>
+      {/* Settings button */}
+      <button
+        className="clb-btn"
+        onClick={() => setSettingsOpen(true)}
+        style={{
+          padding: "8px 12px",
+          fontSize: "18px",
+          background: "transparent",
+          borderColor: "transparent",
+          boxShadow: "none",
+          color: "var(--clb-text-secondary)",
+          transition: "transform 0.2s ease, color 0.2s ease",
+          cursor: "pointer",
+        }}
+        onMouseOver={(e) => {
+          e.currentTarget.style.color = "var(--clb-text-primary)";
+          e.currentTarget.style.transform = "rotate(30deg)";
+        }}
+        onMouseOut={(e) => {
+          e.currentTarget.style.color = "var(--clb-text-secondary)";
+          e.currentTarget.style.transform = "rotate(0deg)";
+        }}
+        title="Settings"
+      >
+        ⚙
+      </button>
 
       {/* Unified Settings Modal */}
       {settingsOpen && (

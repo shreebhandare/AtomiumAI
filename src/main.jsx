@@ -2,6 +2,24 @@ import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import AtomiumCanvas from "./AtomiumCanvas.jsx";
 import { initializeReactionStore } from "./chemistry/initializeReactionStore";
+import { CanvasStoreProvider } from "./stores/CanvasStore";
+import { PanelStoreProvider } from "./stores/PanelStore";
+import { UIStoreProvider, useUIStore } from "./stores/UIStore";
+import { AIStoreProvider } from "./stores/AIStore";
+import { NotificationProvider } from "./providers/NotificationProvider";
+import TutorialManager from "./managers/TutorialManager/TutorialManager";
+
+function AppContent() {
+  const { tutorialActive, completeTutorial } = useUIStore();
+  return (
+    <>
+      <AtomiumCanvas />
+      {tutorialActive && (
+        <TutorialManager onComplete={completeTutorial} />
+      )}
+    </>
+  );
+}
 
 function AppLoader() {
   const [ready, setReady] = useState(false);
@@ -20,7 +38,7 @@ function AppLoader() {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        background: "#0f172a", // Deep premium slate blue matching Atomium aesthetic
+        background: "#0f172a",
         color: "#f8fafc",
         fontFamily: "'Space Grotesk', system-ui, sans-serif",
         gap: 20
@@ -59,11 +77,21 @@ function AppLoader() {
     );
   }
 
-  return <AtomiumCanvas />;
+  return <AppContent />;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <AppLoader />
+    <UIStoreProvider>
+      <CanvasStoreProvider>
+        <PanelStoreProvider>
+          <AIStoreProvider>
+            <NotificationProvider>
+              <AppLoader />
+            </NotificationProvider>
+          </AIStoreProvider>
+        </PanelStoreProvider>
+      </CanvasStoreProvider>
+    </UIStoreProvider>
   </React.StrictMode>
 );

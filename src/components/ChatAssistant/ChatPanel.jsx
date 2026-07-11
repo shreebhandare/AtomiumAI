@@ -27,8 +27,9 @@ export default function ChatPanel({
 
   return (
     <div style={{
-      width: chatExpanded ? 460 : 320,
-      transition: "width 0.2s ease, background 0.3s ease",
+      width: "100%",
+      height: "100%",
+      transition: "background 0.3s ease",
       background: "var(--clb-bg-panel)",
       borderLeft: "1px solid var(--clb-border)",
       boxShadow: "-4px 0 24px rgba(0, 0, 0, 0.08)",
@@ -36,6 +37,7 @@ export default function ChatPanel({
       display: "flex",
       flexDirection: "column",
       flexShrink: 0,
+      overflow: "hidden",
       position: "relative"
     }}>
       <style>{`
@@ -49,7 +51,9 @@ export default function ChatPanel({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "14px 18px",
+        height: 48,
+        minHeight: 48,
+        padding: "0 18px",
         borderBottom: "1px solid var(--clb-border)",
         background: "var(--clb-bg-panel)"
       }}>
@@ -96,7 +100,7 @@ export default function ChatPanel({
         display: "flex",
         flexDirection: "column",
         gap: 12,
-        background: "var(--clb-bg-canvas)"
+        background: "var(--clb-bg-panel)"
       }}>
         {chatMessages.map((m, i) => {
           const isUser = m.role === "user";
