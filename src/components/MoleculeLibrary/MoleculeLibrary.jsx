@@ -9,6 +9,7 @@ import { supabase } from "../../supabase";
  */
 export default function MoleculeLibrary({ onSpawn }) {
   const [molecules, setMolecules] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     async function loadMolecules() {
@@ -79,6 +80,15 @@ export default function MoleculeLibrary({ onSpawn }) {
     loadMolecules();
   }, []);
 
+  const filteredMolecules = molecules.filter((m) => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return true;
+    const nameMatch = m.name?.toLowerCase().includes(term);
+    const formulaMatch = m.formula?.toLowerCase().includes(term);
+    const idMatch = m.id?.toLowerCase().includes(term);
+    return nameMatch || formulaMatch || idMatch;
+  });
+
   return (
     <div style={{
       padding: "12px 16px",
@@ -104,9 +114,81 @@ export default function MoleculeLibrary({ onSpawn }) {
         Note: The molecules here are populated as you discover them through your practice in this app.
       </div>
 
+      <div style={{
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        width: "100%",
+        maxWidth: "320px",
+        marginBottom: "6px",
+      }}>
+        <span style={{
+          position: "absolute",
+          left: "10px",
+          fontSize: "13px",
+          color: "var(--clb-text-muted)",
+          pointerEvents: "none",
+          userSelect: "none",
+        }}>
+          🔎
+        </span>
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search by name or formula (e.g. H2O)..."
+          style={{
+            width: "100%",
+            fontSize: "12px",
+            padding: "6px 28px 6px 28px",
+            borderRadius: "8px",
+            border: "1px solid var(--clb-border)",
+            background: "var(--clb-bg-card)",
+            color: "var(--clb-text-primary)",
+            outline: "none",
+            fontFamily: "inherit",
+            transition: "all 0.15s ease-in-out",
+          }}
+          onFocus={(e) => {
+            e.target.style.borderColor = "var(--clb-border-accent)";
+            e.target.style.boxShadow = "0 0 0 2px rgba(59, 130, 246, 0.15)";
+          }}
+          onBlur={(e) => {
+            e.target.style.borderColor = "var(--clb-border)";
+            e.target.style.boxShadow = "none";
+          }}
+        />
+        {searchTerm && (
+          <button
+            onClick={() => setSearchTerm("")}
+            style={{
+              position: "absolute",
+              right: "8px",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "11px",
+              color: "var(--clb-text-muted)",
+              padding: "4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "color 0.1s ease",
+            }}
+            title="Clear search"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
       {molecules.length === 0 ? (
         <div style={{ fontSize: "12px", color: "var(--clb-text-muted)", fontStyle: "italic" }}>
           Loading molecules...
+        </div>
+      ) : filteredMolecules.length === 0 ? (
+        <div style={{ fontSize: "12px", color: "var(--clb-text-muted)", fontStyle: "italic", padding: "8px 0" }}>
+          No molecules found matching "{searchTerm}"
         </div>
       ) : (
         <div style={{
@@ -114,7 +196,7 @@ export default function MoleculeLibrary({ onSpawn }) {
           gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
           gap: "8px",
         }}>
-          {molecules.map(({ id, name, atomCount, data, isFromSupabase }) => (
+          {filteredMolecules.map(({ id, name, atomCount, data, isFromSupabase }) => (
             <button
               key={id}
               id={`mol-lib-${id}`}
