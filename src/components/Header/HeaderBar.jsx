@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUIStore } from "../../stores/UIStore";
 
 export default function HeaderBar({
   mode,
@@ -21,6 +22,7 @@ export default function HeaderBar({
   setMaterialFinish,
 }) {
   const [activeTab, setActiveTab] = useState("general");
+  const { setTutorialActive, setTutorialStep } = useUIStore();
 
   return (
     <div
@@ -293,6 +295,40 @@ export default function HeaderBar({
                           }}
                         >
                           Standard Chemistry
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ height: 1, background: "#f1f5f9" }} />
+
+                    {/* INTERACTIVE TUTORIAL */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ flex: 1, paddingRight: 16 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155" }}>📖 Help & Tutorial</div>
+                          <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>
+                            Launch the step-by-step interactive tour to learn how to use the chemistry simulator.
+                          </div>
+                        </div>
+                        <button
+                          className="clb-btn"
+                          onClick={() => {
+                            setTutorialActive(true);
+                            setTutorialStep(0);
+                            setSettingsOpen(false);
+                          }}
+                          style={{
+                            fontSize: 12,
+                            padding: "6px 14px",
+                            background: "#2563eb",
+                            borderColor: "#2563eb",
+                            color: "#ffffff",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                          }}
+                        >
+                          Start Tutorial
                         </button>
                       </div>
                     </div>
