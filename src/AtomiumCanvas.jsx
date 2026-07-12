@@ -254,47 +254,23 @@ export default function AtomiumCanvas() {
   // ── Keyboard shortcuts: Ctrl+Z undo / Ctrl+Y or Ctrl+Shift+Z redo ────────
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
+      
+      const isZ = e.key?.toLowerCase() === "z" || e.code === "KeyZ";
+      const isY = e.key?.toLowerCase() === "y" || e.code === "KeyY";
+      const isCtrl = e.ctrlKey || e.metaKey;
+
+      if (isCtrl && !e.shiftKey && isZ) {
         e.preventDefault();
-        if (undoStack.current.length === 0) return;
-        const cur = {
-          atoms: atomsRef.current.map(a => ({ ...a })),
-          bonds: bondsRef.current.map(b => ({ ...b })),
-          bondRestLengths: new Map(bondRestLengths.current),
-        };
-        redoStack.current.push(cur);
-        const snap = undoStack.current.pop();
-        atomsRef.current = snap.atoms.map(a => ({ ...a }));
-        bondsRef.current = snap.bonds.map(b => ({ ...b }));
-        bondRestLengths.current = new Map(snap.bondRestLengths);
-        setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
-        setSelected(null);
-        setUndoSize(undoStack.current.length);
-        setRedoSize(redoStack.current.length);
-      } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))) {
+        performUndo();
+      } else if (isCtrl && (isY || (e.shiftKey && isZ))) {
         e.preventDefault();
-        if (redoStack.current.length === 0) return;
-        const cur = {
-          atoms: atomsRef.current.map(a => ({ ...a })),
-          bonds: bondsRef.current.map(b => ({ ...b })),
-          bondRestLengths: new Map(bondRestLengths.current),
-        };
-        undoStack.current.push(cur);
-        const snap = redoStack.current.pop();
-        atomsRef.current = snap.atoms.map(a => ({ ...a }));
-        bondsRef.current = snap.bonds.map(b => ({ ...b }));
-        bondRestLengths.current = new Map(snap.bondRestLengths);
-        setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
-        setSelected(null);
-        setUndoSize(undoStack.current.length);
-        setRedoSize(redoStack.current.length);
+        performRedo();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [performUndo, performRedo]);
 
   // ── Panel resize state ──
   const [leftWidth, setLeftWidth] = useState(320);
@@ -1483,7 +1459,7 @@ export default function AtomiumCanvas() {
   };
 
   // ── Undo / Redo helpers ─────────────────────────────────────────────────
-  const pushUndoSnapshot = () => {
+  const pushUndoSnapshot = useCallback(() => {
     const snapshot = {
       atoms: atomsRef.current.map(a => ({ ...a })),
       bonds: bondsRef.current.map(b => ({ ...b })),
@@ -1494,9 +1470,9 @@ export default function AtomiumCanvas() {
     redoStack.current = [];
     setUndoSize(undoStack.current.length);
     setRedoSize(0);
-  };
+  }, []);
 
-  const performUndo = () => {
+  const performUndo = useCallback(() => {
     if (undoStack.current.length === 0) return;
     const cur = {
       atoms: atomsRef.current.map(a => ({ ...a })),
@@ -1512,9 +1488,9 @@ export default function AtomiumCanvas() {
     setSelected(null);
     setUndoSize(undoStack.current.length);
     setRedoSize(redoStack.current.length);
-  };
+  }, []);
 
-  const performRedo = () => {
+  const performRedo = useCallback(() => {
     if (redoStack.current.length === 0) return;
     const cur = {
       atoms: atomsRef.current.map(a => ({ ...a })),
@@ -1530,7 +1506,7 @@ export default function AtomiumCanvas() {
     setSelected(null);
     setUndoSize(undoStack.current.length);
     setRedoSize(redoStack.current.length);
-  };
+  }, []);
 
   const addAtomToCanvas = (sym, x, y, particleCount = 10) => {
     const el = getElement(sym);
