@@ -213,6 +213,56 @@ export default function AtomiumCanvas() {
   const [undoSize, setUndoSize] = useState(0);
   const [redoSize, setRedoSize] = useState(0);
 
+  // ── Undo / Redo helpers ─────────────────────────────────────────────────
+  const pushUndoSnapshot = useCallback(() => {
+    const snapshot = {
+      atoms: atomsRef.current.map(a => ({ ...a })),
+      bonds: bondsRef.current.map(b => ({ ...b })),
+      bondRestLengths: new Map(bondRestLengths.current),
+    };
+    undoStack.current.push(snapshot);
+    if (undoStack.current.length > 50) undoStack.current.shift();
+    redoStack.current = [];
+    setUndoSize(undoStack.current.length);
+    setRedoSize(0);
+  }, []);
+
+  const performUndo = useCallback(() => {
+    if (undoStack.current.length === 0) return;
+    const cur = {
+      atoms: atomsRef.current.map(a => ({ ...a })),
+      bonds: bondsRef.current.map(b => ({ ...b })),
+      bondRestLengths: new Map(bondRestLengths.current),
+    };
+    redoStack.current.push(cur);
+    const snap = undoStack.current.pop();
+    atomsRef.current = snap.atoms.map(a => ({ ...a }));
+    bondsRef.current = snap.bonds.map(b => ({ ...b }));
+    bondRestLengths.current = new Map(snap.bondRestLengths);
+    setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+    setSelected(null);
+    setUndoSize(undoStack.current.length);
+    setRedoSize(redoStack.current.length);
+  }, []);
+
+  const performRedo = useCallback(() => {
+    if (redoStack.current.length === 0) return;
+    const cur = {
+      atoms: atomsRef.current.map(a => ({ ...a })),
+      bonds: bondsRef.current.map(b => ({ ...b })),
+      bondRestLengths: new Map(bondRestLengths.current),
+    };
+    undoStack.current.push(cur);
+    const snap = redoStack.current.pop();
+    atomsRef.current = snap.atoms.map(a => ({ ...a }));
+    bondsRef.current = snap.bonds.map(b => ({ ...b }));
+    bondRestLengths.current = new Map(snap.bondRestLengths);
+    setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+    setSelected(null);
+    setUndoSize(undoStack.current.length);
+    setRedoSize(redoStack.current.length);
+  }, []);
+
   // ── Tutorial side-effects ─────────────────────────────────────────────────
   // Runs whenever the active tutorial step changes and drives UI state changes
   // needed to make each highlighted element visible before the card appears.
@@ -1458,55 +1508,7 @@ export default function AtomiumCanvas() {
     draw();
   };
 
-  // ── Undo / Redo helpers ─────────────────────────────────────────────────
-  const pushUndoSnapshot = useCallback(() => {
-    const snapshot = {
-      atoms: atomsRef.current.map(a => ({ ...a })),
-      bonds: bondsRef.current.map(b => ({ ...b })),
-      bondRestLengths: new Map(bondRestLengths.current),
-    };
-    undoStack.current.push(snapshot);
-    if (undoStack.current.length > 50) undoStack.current.shift();
-    redoStack.current = [];
-    setUndoSize(undoStack.current.length);
-    setRedoSize(0);
-  }, []);
 
-  const performUndo = useCallback(() => {
-    if (undoStack.current.length === 0) return;
-    const cur = {
-      atoms: atomsRef.current.map(a => ({ ...a })),
-      bonds: bondsRef.current.map(b => ({ ...b })),
-      bondRestLengths: new Map(bondRestLengths.current),
-    };
-    redoStack.current.push(cur);
-    const snap = undoStack.current.pop();
-    atomsRef.current = snap.atoms.map(a => ({ ...a }));
-    bondsRef.current = snap.bonds.map(b => ({ ...b }));
-    bondRestLengths.current = new Map(snap.bondRestLengths);
-    setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
-    setSelected(null);
-    setUndoSize(undoStack.current.length);
-    setRedoSize(redoStack.current.length);
-  }, []);
-
-  const performRedo = useCallback(() => {
-    if (redoStack.current.length === 0) return;
-    const cur = {
-      atoms: atomsRef.current.map(a => ({ ...a })),
-      bonds: bondsRef.current.map(b => ({ ...b })),
-      bondRestLengths: new Map(bondRestLengths.current),
-    };
-    undoStack.current.push(cur);
-    const snap = redoStack.current.pop();
-    atomsRef.current = snap.atoms.map(a => ({ ...a }));
-    bondsRef.current = snap.bonds.map(b => ({ ...b }));
-    bondRestLengths.current = new Map(snap.bondRestLengths);
-    setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
-    setSelected(null);
-    setUndoSize(undoStack.current.length);
-    setRedoSize(redoStack.current.length);
-  }, []);
 
   const addAtomToCanvas = (sym, x, y, particleCount = 10) => {
     const el = getElement(sym);
