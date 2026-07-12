@@ -80,16 +80,7 @@ export default function ChatPanel({
           }}>AI Assistant</span>
           {!useAI && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} title="AI disabled" />}
         </div>
-        <div style={{ display: "flex", gap: 4 }}>
-          <button
-            className="clb-btn"
-            style={{ padding: "4px 8px", fontSize: 11, height: 26 }}
-            onClick={() => setChatExpanded((v) => !v)}
-            title={chatExpanded ? "Collapse" : "Expand"}
-          >
-            {chatExpanded ? "⤡" : "⤢"}
-          </button>
-        </div>
+
       </div>
 
       {/* Messages */}
