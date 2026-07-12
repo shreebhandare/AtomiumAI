@@ -80,7 +80,6 @@ export default function ChatPanel({
           }}>AI Assistant</span>
           {!useAI && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} title="AI disabled" />}
         </div>
-
       </div>
 
       {/* Messages */}
