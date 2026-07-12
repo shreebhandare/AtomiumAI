@@ -237,10 +237,17 @@ AtomiumAI/
 
 ## Screenshots / Demo
 
-*(Add screenshots and demo videos here)*
-- [Placeholder: Main Canvas UI]
-- [Placeholder: 3D Molecule View]
-- [Placeholder: Reaction Animation]
+### 🧪 Periodic Table & Elements Canvas
+![Periodic Table & Elements Canvas](src/images/elements.png)
+
+### 🔬 Drag & Drop Molecular Workspace
+![Drag & Drop Molecular Workspace](src/images/molecule_complex.png)
+
+### 🔮 3D Molecule Visualizer
+![3D Molecule Visualizer](src/images/3d_mode_molecule.png)
+
+### 🤖 AI Chemistry Assistant in Action
+![AI Chemistry Assistant](src/images/ai_assistant_uric_acid.png)
 
 ---
 
