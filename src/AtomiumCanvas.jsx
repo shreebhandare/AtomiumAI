@@ -207,6 +207,12 @@ export default function AtomiumCanvas() {
   const [bottomTab, setBottomTab] = useState("periodic");
   const [isCollapsed, setIsCollapsed] = useState(true);
 
+  // ── Undo / Redo history (max 50 snapshots) ───────────────────────────────
+  const undoStack = useRef([]);
+  const redoStack = useRef([]);
+  const [undoSize, setUndoSize] = useState(0);
+  const [redoSize, setRedoSize] = useState(0);
+
   // ── Tutorial side-effects ─────────────────────────────────────────────────
   // Runs whenever the active tutorial step changes and drives UI state changes
   // needed to make each highlighted element visible before the card appears.
@@ -244,6 +250,51 @@ export default function AtomiumCanvas() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tutorialActive, tutorialStep]);
+
+  // ── Keyboard shortcuts: Ctrl+Z undo / Ctrl+Y or Ctrl+Shift+Z redo ────────
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (undoStack.current.length === 0) return;
+        const cur = {
+          atoms: atomsRef.current.map(a => ({ ...a })),
+          bonds: bondsRef.current.map(b => ({ ...b })),
+          bondRestLengths: new Map(bondRestLengths.current),
+        };
+        redoStack.current.push(cur);
+        const snap = undoStack.current.pop();
+        atomsRef.current = snap.atoms.map(a => ({ ...a }));
+        bondsRef.current = snap.bonds.map(b => ({ ...b }));
+        bondRestLengths.current = new Map(snap.bondRestLengths);
+        setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+        setSelected(null);
+        setUndoSize(undoStack.current.length);
+        setRedoSize(redoStack.current.length);
+      } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))) {
+        e.preventDefault();
+        if (redoStack.current.length === 0) return;
+        const cur = {
+          atoms: atomsRef.current.map(a => ({ ...a })),
+          bonds: bondsRef.current.map(b => ({ ...b })),
+          bondRestLengths: new Map(bondRestLengths.current),
+        };
+        undoStack.current.push(cur);
+        const snap = redoStack.current.pop();
+        atomsRef.current = snap.atoms.map(a => ({ ...a }));
+        bondsRef.current = snap.bonds.map(b => ({ ...b }));
+        bondRestLengths.current = new Map(snap.bondRestLengths);
+        setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+        setSelected(null);
+        setUndoSize(undoStack.current.length);
+        setRedoSize(redoStack.current.length);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Panel resize state ──
   const [leftWidth, setLeftWidth] = useState(320);
@@ -1431,9 +1482,60 @@ export default function AtomiumCanvas() {
     draw();
   };
 
+  // ── Undo / Redo helpers ─────────────────────────────────────────────────
+  const pushUndoSnapshot = () => {
+    const snapshot = {
+      atoms: atomsRef.current.map(a => ({ ...a })),
+      bonds: bondsRef.current.map(b => ({ ...b })),
+      bondRestLengths: new Map(bondRestLengths.current),
+    };
+    undoStack.current.push(snapshot);
+    if (undoStack.current.length > 50) undoStack.current.shift();
+    redoStack.current = [];
+    setUndoSize(undoStack.current.length);
+    setRedoSize(0);
+  };
+
+  const performUndo = () => {
+    if (undoStack.current.length === 0) return;
+    const cur = {
+      atoms: atomsRef.current.map(a => ({ ...a })),
+      bonds: bondsRef.current.map(b => ({ ...b })),
+      bondRestLengths: new Map(bondRestLengths.current),
+    };
+    redoStack.current.push(cur);
+    const snap = undoStack.current.pop();
+    atomsRef.current = snap.atoms.map(a => ({ ...a }));
+    bondsRef.current = snap.bonds.map(b => ({ ...b }));
+    bondRestLengths.current = new Map(snap.bondRestLengths);
+    setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+    setSelected(null);
+    setUndoSize(undoStack.current.length);
+    setRedoSize(redoStack.current.length);
+  };
+
+  const performRedo = () => {
+    if (redoStack.current.length === 0) return;
+    const cur = {
+      atoms: atomsRef.current.map(a => ({ ...a })),
+      bonds: bondsRef.current.map(b => ({ ...b })),
+      bondRestLengths: new Map(bondRestLengths.current),
+    };
+    undoStack.current.push(cur);
+    const snap = redoStack.current.pop();
+    atomsRef.current = snap.atoms.map(a => ({ ...a }));
+    bondsRef.current = snap.bonds.map(b => ({ ...b }));
+    bondRestLengths.current = new Map(snap.bondRestLengths);
+    setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
+    setSelected(null);
+    setUndoSize(undoStack.current.length);
+    setRedoSize(redoStack.current.length);
+  };
+
   const addAtomToCanvas = (sym, x, y, particleCount = 10) => {
     const el = getElement(sym);
     if (!el) return;
+    pushUndoSnapshot();
     const id = idCounter.current++;
     atomsRef.current.push({
       id, sym, x, y, vx: 0, vy: 0,
@@ -1461,6 +1563,7 @@ export default function AtomiumCanvas() {
   };
 
   const clearAll = () => {
+    if (atomsRef.current.length > 0) pushUndoSnapshot();
     atomsRef.current = [];
     bondsRef.current = [];
     committedCompound.current = null;
@@ -1759,6 +1862,7 @@ export default function AtomiumCanvas() {
   const spawnAtomsFromFormula = async () => {
     const formula = formulaInput.trim();
     if (!formula) return;
+    pushUndoSnapshot();
 
     let s = formula.replace(/\s+/g, "");
     let coefMatch = s.match(/^([0-9]+)(.*)/);
@@ -1854,6 +1958,7 @@ export default function AtomiumCanvas() {
 
   const removeSelected = () => {
     if (!selected) return;
+    pushUndoSnapshot();
     atomsRef.current = atomsRef.current.filter((a) => a.id !== selected.id);
     bondsRef.current = bondsRef.current.filter((b) => b.a !== selected.id && b.b !== selected.id);
     setCounts({ atoms: atomsRef.current.length, bonds: bondsRef.current.length });
@@ -1862,6 +1967,7 @@ export default function AtomiumCanvas() {
 
   // Remove all atoms belonging to a molecule by formula string (e.g. "2H", "O", "H2O")
   const removeMoleculeByFormula = (formula) => {
+    pushUndoSnapshot();
     const atoms = atomsRef.current;
     // Case 1: spawned group with matching spawnGroupFormula
     const matchedGroup = atoms.find((a) => a.spawnGroupFormula === formula);
@@ -2159,6 +2265,7 @@ export default function AtomiumCanvas() {
     settingsOpen, setSettingsOpen, isWaitingForAI
   } = useChatAssistant({
     atomsRef, idCounter, clearAll, setCounts, setTempK, setPressureAtm,
+    pushUndoSnapshot,
     selectedAtom: selected,
     selectedMolecule: selMolecule,
     currentMolecules,
@@ -2218,6 +2325,7 @@ export default function AtomiumCanvas() {
       molData = moleculeIdOrData;
     }
     if (!molData) return;
+    pushUndoSnapshot();
     const center = findSafePosition(atomsRef.current);
     const { atoms: newAtoms, bonds: newBonds } = buildMoleculeAtomsBonds(molData, center, idCounter);
 
@@ -2373,6 +2481,37 @@ export default function AtomiumCanvas() {
             flexShrink: 0,
           }}>
             <span style={{ fontSize: 13.5, fontWeight: 700, color: themeVars.textPrimary, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: 0.2 }}>⚗️ Lab</span>
+            <div style={{ flex: 1 }} />
+            <button
+              id="undo-btn"
+              title="Undo (Ctrl+Z)"
+              onClick={performUndo}
+              disabled={undoSize === 0}
+              style={{
+                background: "transparent", border: "none",
+                cursor: undoSize > 0 ? "pointer" : "default",
+                color: undoSize > 0 ? themeVars.textPrimary : themeVars.textMuted,
+                fontSize: 17, padding: "4px 5px", borderRadius: 6,
+                opacity: undoSize > 0 ? 1 : 0.3,
+                transition: "opacity 0.15s, color 0.15s",
+                lineHeight: 1,
+              }}
+            >↩</button>
+            <button
+              id="redo-btn"
+              title="Redo (Ctrl+Y)"
+              onClick={performRedo}
+              disabled={redoSize === 0}
+              style={{
+                background: "transparent", border: "none",
+                cursor: redoSize > 0 ? "pointer" : "default",
+                color: redoSize > 0 ? themeVars.textPrimary : themeVars.textMuted,
+                fontSize: 17, padding: "4px 5px", borderRadius: 6,
+                opacity: redoSize > 0 ? 1 : 0.3,
+                transition: "opacity 0.15s, color 0.15s",
+                lineHeight: 1,
+              }}
+            >↪</button>
           </div>
 
           {/* Left panel scrollable content */}
@@ -2444,7 +2583,7 @@ export default function AtomiumCanvas() {
                     id={`bottom-tab-${tab}`}
                     role="tab"
                     aria-selected={bottomTab === tab}
-                    onClick={() => setBottomTab(tab)}
+                    onClick={() => { setBottomTab(tab); setIsCollapsed(false); }}
                     style={{
                       padding: "8px 16px",
                       fontSize: "12px", fontWeight: "600",

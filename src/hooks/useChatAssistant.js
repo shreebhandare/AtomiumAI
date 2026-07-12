@@ -48,6 +48,7 @@ export function useChatAssistant({
   setCounts,
   setTempK,
   setPressureAtm,
+  pushUndoSnapshot,
   selectedAtom,
   selectedMolecule,
   currentMolecules,
@@ -245,6 +246,7 @@ Always return exactly one JSON object of exactly one type — nothing else.`;
         const fp = fingerprint(parsed.reactants);
         COMPOUND_BLUEPRINTS[fp] = { ...parsed, fromAtomiumAI: true };
 
+        if (typeof pushUndoSnapshot === "function") pushUndoSnapshot();
         clearAll();
         const radius = 60;
         const count = parsed.reactants.length;
@@ -276,6 +278,7 @@ Always return exactly one JSON object of exactly one type — nothing else.`;
             : "I have added atoms to the canvas, you can start the simulation."
         );
       } else if (parsed?.type === "spawn_atoms" && Array.isArray(parsed.atoms) && parsed.atoms.length > 0) {
+        if (typeof pushUndoSnapshot === "function") pushUndoSnapshot();
         const radius = 60;
         const count = parsed.atoms.length;
         const newAtoms = parsed.atoms.map((sym, index) => {

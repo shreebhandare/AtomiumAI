@@ -59,7 +59,7 @@ export default function CanvasHUD({ mode, startReaction, clearAll, fitAll, reset
         onClick={startReaction}
         title={isRunning ? "Stop reaction" : "Start reaction"}
       >
-        {isRunning ? "⏹ Stop" : "▶ Start"}
+        {isRunning ? "⏹ Stop Reaction" : "▶ Start Reaction"}
       </button>
 
       {/* Clear */}
@@ -70,7 +70,7 @@ export default function CanvasHUD({ mode, startReaction, clearAll, fitAll, reset
         onClick={clearAll}
         title="Clear canvas"
       >
-        🗑 Clear
+        🗑 Clear Canvas
       </button>
 
       {/* Fit All */}

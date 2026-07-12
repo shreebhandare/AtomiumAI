@@ -103,7 +103,7 @@ export default function ViewModeTabs({
           onClick={startReaction}
           title={isRunning ? "Stop reaction" : "Start reaction"}
         >
-          {isRunning ? "⏹ Stop" : "▶ Start"}
+          {isRunning ? "⏹ Stop Reaction" : "▶ Start Reaction"}
         </button>
 
         {/* Clear */}
@@ -118,7 +118,7 @@ export default function ViewModeTabs({
           onClick={clearAll}
           title="Clear canvas"
         >
-          🗑 Clear
+          🗑 Clear Canvas
         </button>
       </div>
     </div>
