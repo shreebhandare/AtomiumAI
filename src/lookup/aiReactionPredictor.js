@@ -9,8 +9,9 @@
 //
 // PubChem is never used here — this is purely AI-based reaction prediction.
 
-import { FIREWORKS_API_KEY, FIREWORKS_MODEL } from "../chemistry/reactionStore";
+import { FIREWORKS_API_KEY, FIREWORKS_MODEL, AMD_API_ENDPOINT } from "../chemistry/reactionStore";
 import { fetchWithRetry } from "./fireworksClient";
+import { callAMDEndpoint } from "./amdClient";
 
 /**
  * Asks the AI to predict a molecule-to-molecule reaction.
@@ -52,6 +53,48 @@ If a reaction exists, return a single JSON object with this EXACT schema:
 
 Output ONLY the JSON object — no prose, no markdown fences, no comments.`;
 
+  // ── 1. AMD Developer Cloud (primary) ──────────────────────────────────────
+  try {
+    const raw = await callAMDEndpoint(AMD_API_ENDPOINT, prompt);
+    let parsed;
+    try {
+      const cleaned = raw.replace(/```json|```/g, "").trim();
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (match) parsed = JSON.parse(match[0]);
+      else throw new Error("No JSON in AMD response");
+    }
+    if (!parsed.no_reaction && !parsed.invalid) {
+      if (Array.isArray(parsed.reactants) && Array.isArray(parsed.products) && parsed.name) {
+        console.log("[Provider: AMD] Reaction predicted:", parsed.name);
+        const products = parsed.products.filter(p => p.formula && typeof p.coefficient === "number" && p.coefficient > 0);
+        return {
+          reactionCode: `RXN_AI_${Date.now()}`,
+          name: parsed.name,
+          type: parsed.type || "unknown",
+          reactants: parsed.reactants,
+          products,
+          fact: parsed.fact || "AI-predicted reaction.",
+          deltaH: parsed.deltaH != null ? Number(parsed.deltaH) : undefined,
+          fromAI: true,
+        };
+      }
+    }
+    // AMD said no_reaction or invalid — return null without Fireworks fallback
+    if (parsed.no_reaction || parsed.invalid) {
+      console.log("[Provider: AMD] No reaction predicted.");
+      return null;
+    }
+  } catch (amdErr) {
+    console.warn("[AMD] Reaction predictor failed, falling back to Fireworks:", amdErr.message);
+  }
+
+  // ── 2. Fireworks (fallback) ───────────────────────────────────────────────
+  if (!FIREWORKS_API_KEY || !FIREWORKS_MODEL) {
+    console.warn("[AI Predictor] AMD failed and no Fireworks API key/model configured.");
+    return null;
+  }
   const res = await fetchWithRetry(
     "https://api.fireworks.ai/inference/v1/chat/completions",
     {
@@ -105,6 +148,7 @@ Output ONLY the JSON object — no prose, no markdown fences, no comments.`;
     }
   }
 
+  console.log("[Provider: Fireworks-Fallback] Reaction predicted:", parsed.name);
   return {
     reactionCode: `RXN_AI_${Date.now()}`,
     name: parsed.name,

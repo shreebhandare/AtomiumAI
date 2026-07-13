@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { getElement } from "../data/elements";
 import { fingerprint } from "../chemistry/fingerprint";
-import { COMPOUND_BLUEPRINTS, FIREWORKS_API_KEY, FIREWORKS_MODEL } from "../chemistry/reactionStore";
+import { COMPOUND_BLUEPRINTS, FIREWORKS_API_KEY, FIREWORKS_MODEL, AMD_API_ENDPOINT } from "../chemistry/reactionStore";
 import { fetchWithRetry } from "../lookup/fireworksClient";
+import { callAMDEndpoint } from "../lookup/amdClient";
 import { getCanonicalEquation } from "../chemistry/equationBuilder";
 
 // Incremental JSON reader helpers to extract type and text from raw buffer
@@ -69,12 +70,9 @@ export function useChatAssistant({
     setChatMessages((m) => [...m, { role: "user", text }]);
     setChatInput("");
 
-    if (!FIREWORKS_API_KEY) {
-      setChatMessages((m) => [...m, { role: "ai", text: "No AI API key configured. Add VITE_FIREWORKS_API_KEY to your .env file." }]);
-      return;
-    }
-    if (!FIREWORKS_MODEL) {
-      setChatMessages((m) => [...m, { role: "ai", text: "No AI model configured. Add VITE_FIREWORKS_MODEL to your .env file." }]);
+    // Neither AMD nor Fireworks is available
+    if (!AMD_API_ENDPOINT && !FIREWORKS_API_KEY) {
+      setChatMessages((m) => [...m, { role: "ai", text: "No AI provider configured. Add VITE_AMD_API_ENDPOINT or VITE_FIREWORKS_API_KEY to your .env file." }]);
       return;
     }
     setIsWaitingForAI(true);
@@ -139,84 +137,104 @@ ${JSON.stringify(canvasState, null, 2)}
 
 Always return exactly one JSON object of exactly one type — nothing else.`;
 
-      const res = await fetchWithRetry(
-        "https://api.fireworks.ai/inference/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${FIREWORKS_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: FIREWORKS_MODEL,
-            messages: [
-              { role: "system", content: systemInstructionText },
-              { role: "user", content: text }
-            ],
-            stream: true
-          }),
-        }
-      );
-      if (!res.ok) {
-        if (res.status === 429) {
-          throw new Error("AI API Rate Limit Exceeded (429). Please wait a moment before trying again.");
-        }
-        if (res.status === 401 || res.status === 403) {
-          throw new Error("AI API Key Invalid or Unauthorized. Please verify VITE_FIREWORKS_API_KEY in your .env file.");
-        }
-        throw new Error(`AI request failed: ${res.status}`);
-      }
-
       let rawBuffer = "";
       let liveType = null;
 
-      const updateLiveBubble = () => {
-        if (!liveType) {
-          liveType = extractStreamingType(rawBuffer);
-          if (liveType && liveType !== "reaction" && !liveMessageId) {
-            liveMessageId = `ai-stream-${Date.now()}`;
-            setChatMessages((m) => [...m, { role: "ai", text: "", id: liveMessageId, streaming: true }]);
-          }
+      // ── 1. AMD Developer Cloud (primary, non-streaming) ──────────────────────
+      let amdSucceeded = false;
+      if (AMD_API_ENDPOINT) {
+        try {
+          const amdPrompt = `${systemInstructionText}\n\nUser: ${text}`;
+          rawBuffer = await callAMDEndpoint(AMD_API_ENDPOINT, amdPrompt);
+          console.log("[Provider: AMD] Chat response received.");
+          amdSucceeded = true;
+        } catch (amdErr) {
+          console.warn("[AMD] Chat request failed, falling back to Fireworks:", amdErr.message);
         }
-        if (liveType && liveType !== "reaction" && liveMessageId) {
-          const partial = extractStreamingText(rawBuffer);
-          if (partial) {
-            setChatMessages((m) => m.map((msg) => (msg.id === liveMessageId ? { ...msg, text: partial } : msg)));
-          }
+      }
+
+      // ── 2. Fireworks streaming (fallback) ─────────────────────────────────────
+      if (!amdSucceeded) {
+        if (!FIREWORKS_API_KEY || !FIREWORKS_MODEL) {
+          throw new Error("AMD endpoint unavailable and no Fireworks API key/model configured.");
         }
-      };
+        const res = await fetchWithRetry(
+          "https://api.fireworks.ai/inference/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${FIREWORKS_API_KEY}`
+            },
+            body: JSON.stringify({
+              model: FIREWORKS_MODEL,
+              messages: [
+                { role: "system", content: systemInstructionText },
+                { role: "user", content: text }
+              ],
+              stream: true
+            }),
+          }
+        );
+        if (!res.ok) {
+          if (res.status === 429) {
+            throw new Error("AI API Rate Limit Exceeded (429). Please wait a moment before trying again.");
+          }
+          if (res.status === 401 || res.status === 403) {
+            throw new Error("AI API Key Invalid or Unauthorized. Please verify VITE_FIREWORKS_API_KEY in your .env file.");
+          }
+          throw new Error(`AI request failed: ${res.status}`);
+        }
 
-      if (res.body && res.body.getReader) {
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let sseBuffer = "";
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          sseBuffer += decoder.decode(value, { stream: true });
-          const events = sseBuffer.split("\n\n");
-          sseBuffer = events.pop() || "";
-
-          for (const evt of events) {
-            const line = evt.trim();
-            if (!line.startsWith("data:")) continue;
-            const payload = line.slice(5).trim();
-            if (!payload || payload === "[DONE]") continue;
-            let chunkObj;
-            try {
-              chunkObj = JSON.parse(payload);
-            } catch (_) {
-              continue;
+        const updateLiveBubble = () => {
+          if (!liveType) {
+            liveType = extractStreamingType(rawBuffer);
+            if (liveType && liveType !== "reaction" && !liveMessageId) {
+              liveMessageId = `ai-stream-${Date.now()}`;
+              setChatMessages((m) => [...m, { role: "ai", text: "", id: liveMessageId, streaming: true }]);
             }
-            const deltaText = chunkObj?.choices?.[0]?.delta?.content;
-            if (!deltaText) continue;
-            rawBuffer += deltaText;
-            updateLiveBubble();
           }
+          if (liveType && liveType !== "reaction" && liveMessageId) {
+            const partial = extractStreamingText(rawBuffer);
+            if (partial) {
+              setChatMessages((m) => m.map((msg) => (msg.id === liveMessageId ? { ...msg, text: partial } : msg)));
+            }
+          }
+        };
+
+        if (res.body && res.body.getReader) {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let sseBuffer = "";
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            sseBuffer += decoder.decode(value, { stream: true });
+            const events = sseBuffer.split("\n\n");
+            sseBuffer = events.pop() || "";
+
+            for (const evt of events) {
+              const line = evt.trim();
+              if (!line.startsWith("data:")) continue;
+              const payload = line.slice(5).trim();
+              if (!payload || payload === "[DONE]") continue;
+              let chunkObj;
+              try {
+                chunkObj = JSON.parse(payload);
+              } catch (_) {
+                continue;
+              }
+              const deltaText = chunkObj?.choices?.[0]?.delta?.content;
+              if (!deltaText) continue;
+              rawBuffer += deltaText;
+              updateLiveBubble();
+            }
+          }
+        } else {
+          const data = await res.json();
+          rawBuffer = data?.choices?.[0]?.message?.content || "";
         }
-      } else {
-        const data = await res.json();
-        rawBuffer = data?.choices?.[0]?.message?.content || "";
+        console.log("[Provider: Fireworks-Fallback] Chat response received.");
       }
 
       const reply = rawBuffer.trim();

@@ -113,6 +113,12 @@ if (!FIREWORKS_MODEL) {
   console.error("[Atomium] VITE_FIREWORKS_MODEL is not configured. Set it in your .env file (e.g. VITE_FIREWORKS_MODEL=accounts/fireworks/models/qwen3p7-plus).");
 }
 
+// AMD Developer Cloud endpoint (primary LLM provider).
+// Configurable via VITE_AMD_API_ENDPOINT; falls back to Fireworks if unreachable.
+export const AMD_API_ENDPOINT =
+  import.meta.env.VITE_AMD_API_ENDPOINT ||
+  "https://elevating-vanish-unseen.ngrok-free.dev/generate";
+
 
 // "Search Online" toggle (Upgrade #10.1): when false, PubChem's live network
 // lookup is skipped entirely and resolution falls back to whatever's already

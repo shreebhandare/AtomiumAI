@@ -1,13 +1,37 @@
 // Orchestrates reaction resolution: for an unknown fingerprint, tries the in-memory
-// cache, then Supabase, then PubChem, then Gemini (in that order), caching whichever
-// source succeeds. This is the single entry point the component calls.
+// cache, then Supabase, then PubChem, then AMD (primary AI), then Fireworks (fallback),
+// caching whichever source succeeds. This is the single entry point the component calls.
 import { supabase } from "../supabase";
-import { COMPOUND_BLUEPRINTS, pendingLookups, FIREWORKS_API_KEY, FIREWORKS_MODEL, SEARCH_ONLINE_ENABLED, getInventorySearchGeneration } from "../chemistry/reactionStore";
+import { COMPOUND_BLUEPRINTS, pendingLookups, FIREWORKS_API_KEY, FIREWORKS_MODEL, AMD_API_ENDPOINT, SEARCH_ONLINE_ENABLED, getInventorySearchGeneration } from "../chemistry/reactionStore";
 import { fingerprint } from "../chemistry/fingerprint";
 import { tryPubChem } from "./pubchemClient";
 import { generateReactionWithFireworks } from "./fireworksClient";
+import { generateReactionWithAMD } from "./amdClient";
 import { saveReactionToSupabase } from "./supabaseSync";
 import { generateCandidateFormulas, formulaFromCounts, fingerprintFromCounts } from "../chemistry/candidateFormulas";
+
+/** Try AMD first, then Fireworks. Returns entry or null. Logs the serving provider. */
+async function generateReactionWithAI(fp, syms) {
+  // 1. AMD (primary)
+  try {
+    const entry = await generateReactionWithAMD(fp, syms, AMD_API_ENDPOINT);
+    if (entry) {
+      console.log(`[Provider: AMD] Compound resolved: ${entry.name}`);
+      return entry;
+    }
+  } catch (amdErr) {
+    console.warn(`[AMD] Failed for ${fp}, falling back to Fireworks:`, amdErr.message);
+  }
+
+  // 2. Fireworks (fallback)
+  if (FIREWORKS_API_KEY) {
+    const entry = await generateReactionWithFireworks(fp, syms, FIREWORKS_API_KEY, FIREWORKS_MODEL);
+    if (entry) console.log(`[Provider: Fireworks-Fallback] Compound resolved: ${entry.name}`);
+    return entry;
+  }
+
+  return null;
+}
 
 export async function resolveUnknownReaction(fp, syms, onStatus) {
   if (pendingLookups.has(fp)) return;
@@ -27,20 +51,17 @@ export async function resolveUnknownReaction(fp, syms, onStatus) {
       }
     }
 
-    if (FIREWORKS_API_KEY) {
-      try {
-        onStatus?.("ai-generating");
-        const entry = await generateReactionWithFireworks(fp, syms, FIREWORKS_API_KEY, FIREWORKS_MODEL);
-        if (entry) {
-          COMPOUND_BLUEPRINTS[fp] = entry;
-          saveReactionToSupabase(fp, entry);
-          onStatus?.(`found:${entry.name} (AI)`);
-          console.log(`[Fireworks] Cached reaction for ${fp}:`, entry.name);
-          return;
-        }
-      } catch (err) {
-        console.warn(`[Fireworks] Generation failed for ${fp}:`, err.message);
+  try {
+      onStatus?.("ai-generating");
+      const entry = await generateReactionWithAI(fp, syms);
+      if (entry) {
+        COMPOUND_BLUEPRINTS[fp] = entry;
+        saveReactionToSupabase(fp, entry);
+        onStatus?.(`found:${entry.name} (AI)`);
+        return;
       }
+    } catch (err) {
+      console.warn(`[AI] Generation failed for ${fp}:`, err.message);
     }
     onStatus?.("not-found");
   } finally {
@@ -82,18 +103,16 @@ export async function findCompoundEntry(fp, syms) {
     }
   }
 
-  // 4. Fireworks AI
-  if (FIREWORKS_API_KEY) {
-    try {
-      const entry = await generateReactionWithFireworks(fp, syms, FIREWORKS_API_KEY, FIREWORKS_MODEL);
-      if (entry) {
-        COMPOUND_BLUEPRINTS[fp] = entry;
-        saveReactionToSupabase(fp, entry);
-        return entry;
-      }
-    } catch (err) {
-      console.warn(`[findCompoundEntry] Fireworks generation failed:`, err.message);
+  // 4. AMD (primary) → Fireworks (fallback)
+  try {
+    const entry = await generateReactionWithAI(fp, syms);
+    if (entry) {
+      COMPOUND_BLUEPRINTS[fp] = entry;
+      saveReactionToSupabase(fp, entry);
+      return entry;
     }
+  } catch (err) {
+    console.warn(`[findCompoundEntry] AI generation failed:`, err.message);
   }
 
   return null;
@@ -190,11 +209,11 @@ export async function runInventorySearch(atoms, generation, onCommit, onStatus) 
       }
     }
 
-    // 4. Fireworks AI fallback (only for full inventory, not sub-sets)
+    // 4. AMD (primary) → Fireworks (fallback) — only for full inventory, not sub-sets
     const isFullInventory = syms.length === atoms.length;
-    if (isFullInventory && FIREWORKS_API_KEY && !pendingLookups.has(fp)) {
+    if (isFullInventory && !pendingLookups.has(fp)) {
       try {
-        const entry = await generateReactionWithFireworks(fp, syms, FIREWORKS_API_KEY, FIREWORKS_MODEL);
+        const entry = await generateReactionWithAI(fp, syms);
         if (getInventorySearchGeneration() !== generation) return;
         if (entry) {
           COMPOUND_BLUEPRINTS[fp] = entry;
@@ -205,7 +224,7 @@ export async function runInventorySearch(atoms, generation, onCommit, onStatus) 
         }
       } catch (err) {
         if (getInventorySearchGeneration() !== generation) return;
-        console.warn(`[Inventory] Fireworks miss: ${formula}`, err.message);
+        console.warn(`[Inventory] AI miss: ${formula}`, err.message);
       }
     }
   }

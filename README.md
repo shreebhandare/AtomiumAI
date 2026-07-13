@@ -62,8 +62,10 @@ Atomium solves these problems by providing a comprehensive, interactive learning
 - **Spatial Understanding:** Seamlessly switch to a 3D viewer (powered by `3dmol.js`) to rotate, zoom, and inspect the true spatial geometry of the generated molecules.
 
 ### 9. AI Chemistry Assistant
-- **Specialized Knowledge:** Powered by advanced LLMs (Fireworks API / Qwen), the assistant is specialized strictly for educational chemistry.
-- **Reaction Prediction:** If a reaction isn't in the local database, the AI attempts to predict valid, real-world chemical reactions based on the reactants on the canvas.
+- **AMD Developer Cloud Integration:** Powered primarily by Microsoft Phi-3 Mini 4K Instruct hosted on AMD Developer Cloud using AMD ROCm acceleration.
+- **Automatic Fallback:** Includes a transparent fallback to Fireworks AI (Qwen models) if the primary AMD Developer Cloud endpoint is offline or times out.
+- **Configurable Endpoint:** The primary AMD endpoint is fully configurable via the `VITE_AMD_API_ENDPOINT` environment variable.
+- **Reaction Prediction:** Automatically predicts valid, real-world chemical reactions for elements/molecules on the workspace when no database records exist.
 - **Safety Boundaries:** The AI is constrained to safe, educational chemistry and will refuse to assist with harmful or out-of-scope requests.
 
 ### 10. Lab Notebook (Supabase Persistence)
@@ -108,7 +110,9 @@ The engine can parse, render, and view 3D structures for complex molecules like:
 
 - **Frontend Technology:** React 18, Vite, standard CSS.
 - **Backend/Database:** Supabase (PostgreSQL) for storing reaction blueprints and user discoveries.
-- **AI Integration:** Fireworks AI API (Qwen models) for real-time reaction prediction and the chat assistant.
+- **AI Integration (Primary):** Microsoft Phi-3 Mini 4K Instruct hosted on **AMD Developer Cloud** with **AMD ROCm** hardware acceleration, exposed via a **FastAPI** service and **ngrok** tunnel.
+- **AI Integration (Fallback):** **Fireworks AI API** (Qwen models) acting as an automatic, transparent fallback if the AMD endpoint is unreachable.
+- **Backend/Model Deployment Stack:** Hugging Face Transformers, PyTorch, ROCm, FastAPI, ngrok.
 - **Chemistry Engine:** A custom-built JavaScript engine (`src/chemistry/`) that handles formula parsing, canonicalization (Hill system), molecular graph traversal, and reaction resolution.
 - **Physics/Rendering:** Custom HTML5 Canvas rendering loop with Verlet integration for spring-drag physics and pairwise atom repulsion.
 - **3D Rendering:** `3dmol.js` integrated for visualizing generated SDF/XYZ molecular data.
@@ -123,20 +127,69 @@ The engine can parse, render, and view 3D structures for complex molecules like:
 
 ---
 
+## AMD Developer Cloud Integration
+
+ChemLabAI runs a high-performance, local LLM inference pipeline integrated directly into the workspace:
+- **Model:** Microsoft Phi-3 Mini 4K Instruct, an open-source, highly efficient model optimized for reasoning.
+- **Hardware & Acceleration:** Hosted on the **AMD Developer Cloud** powered by AMD GPUs and accelerated using the **AMD ROCm** software stack.
+- **Inference Service:** Served via a lightweight **FastAPI** service running Hugging Face Transformers.
+- **Connectivity:** Exposed securely to the client application via an **ngrok** tunnel.
+- **Automatic Fallback:** Includes a transparent fallback mechanism that automatically redirects requests to **Fireworks AI** (Qwen models) if the AMD Developer Cloud endpoint is unavailable or times out.
+
+### Architecture Diagram
+
+```
+ChemLabAI
+     ↓
+FastAPI (/generate)
+     ↓
+Microsoft Phi-3 Mini 4K Instruct
+     ↓
+AMD Developer Cloud (ROCm GPU)
+
+Automatic fallback:
+Fireworks AI
+```
+
+### Integration Evidence
+
+Below are screenshots demonstrating the active AMD Developer Cloud integration and infrastructure setup:
+
+#### 1. ROCm GPU Verification
+![ROCm GPU Verification](src/images/ROCm_GPU_Verification.png)
+*AMD ROCm GPU verification showing active GPU and ROCm SMI status.*
+
+#### 2. Model Loaded in GPU Memory
+![Model Loaded on AMD GPU](src/images/Model_loaded_on_AMD_GPU.png)
+*Microsoft Phi-3 Mini 4K Instruct loaded successfully on AMD GPU memory.*
+
+#### 3. FastAPI & ngrok Tunnel
+![FastAPI & ngrok Endpoint](src/images/FastAPI_ngrok_Endpoint.png)
+*FastAPI inference service exposing the /generate endpoint securely via ngrok.*
+
+#### 4. ChemLabAI AI Assistant
+![ChemLabAI AI Assistant](src/images/ai_assistant_uric_acid.png)
+*ChemLabAI chat assistant generating molecular data utilizing the AMD Developer Cloud hosted model.*
+
+---
+
 ## Installation & Setup
 
 ### Prerequisites
 - Node.js (v18 or higher recommended)
 - npm or yarn
 - A Supabase account (for database features)
-- A Fireworks AI API Key (for AI features)
+- An AMD Developer Cloud endpoint (or fallback to Fireworks)
+- A Fireworks AI API Key (optional, for transparent fallback features)
 
 ### Environment Variables
 Create a `.env` file in the root directory:
 ```env
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_AMD_API_ENDPOINT=https://elevating-vanish-unseen.ngrok-free.dev/generate
 VITE_FIREWORKS_API_KEY=your_fireworks_api_key
+VITE_FIREWORKS_MODEL=accounts/fireworks/models/qwen3p7-plus
 ```
 
 ### Installation
@@ -176,6 +229,7 @@ docker compose up --build -d
 docker build \
   --build-arg VITE_SUPABASE_URL=your_url \
   --build-arg VITE_SUPABASE_ANON_KEY=your_key \
+  --build-arg VITE_AMD_API_ENDPOINT=https://elevating-vanish-unseen.ngrok-free.dev/generate \
   --build-arg VITE_FIREWORKS_API_KEY=your_key \
   --build-arg VITE_FIREWORKS_MODEL=your_model \
   -t Atomium-ai .
